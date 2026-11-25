@@ -257,6 +257,44 @@ Estimates assume one engineer with coding agents.
 
 **About 7–8 weeks** in total (revision 4: about 19). M2 and M3 can overlap once M1's read models exist. D1 switches on when M3 lands and the account has 20 matured posts.
 
+### M1 status (2026-11-25)
+
+In progress on branch `m1-daily-runs` (commits `e97f425`..`841a480`); not yet merged into `main`.
+
+**Shipped:**
+
+| Area | What | Commit |
+|---|---|---|
+| X integration | `socialmgr connect` (OAuth 2.0 PKCE, Native App, handle check), token refresh under a file lock with the rotated refresh token committed first, owner provider (30-day timeline with non-public metrics, follower count, newest-first follower paging), `socialmgr probe` | `e97f425` |
+| Run engine | `socialmgr run`: ordered, resumable steps (collect → regimes → match planned → label → freeze as-of → score → fit curve → briefing → backup), file run lock, billing once per resource per UTC day, monthly cap | `c5aa21b` |
+| Labels | Rule labels and text features, MinHash near-duplicate flags, LLM labeller seam: `claude_code` (default, headless `claude -p --model haiku`), `anthropic_api` (`uv sync --extra api`), `none` | `c5aa21b`, `1123198` |
+| Models | Prior-only NB2 champion, trailing-median challenger, versioned Weibull maturity curve fitted from capture pairs, scoring (PIT, CRPS, 50/80% hits), regime registry seeded with MODEL §2e dates plus the `param.rs` check | `c5aa21b` |
+| Planned posts | `socialmgr plan` and `register_planned_post`: live forecast frozen at registration, guardrails (near-duplicate block, 3h spacing warning), matched by text or time ±30 min | `c5aa21b` |
+| Screens | Overview (and its day-zero state) with `GET /api/overview`; Posts detail drawer with `GET /api/posts/{id}` | `1b516d1`, `e6c35f7` |
+| First real run | Reposts excluded from forecasts and scores, expected X partial errors silenced, back-fill follower count, labeller hardening | `1123198` |
+| MCP | `socialmgr mcp` (stdio): the eleven M1 tools of §8, `socialmgr://briefing/latest`, prompts `weekly_review` and `plan_next_week` | `841a480` |
+
+Still placeholders until their milestone: the Overview briefing panel, follower forecast band, model health, goals and planned-posts areas (M3, M2); `set_goal`, `get_follower_forecast` and the model-card resource (M3).
+
+**Acceptance criteria:**
+
+| Criterion | How it is checked |
+|---|---|
+| Irregular 1–3 day gaps: every post gets a maturity capture and is scored or flagged `late_maturity` | `tests/test_m1_acceptance.py`: `test_irregular_gaps_every_post_matures_and_is_scored`, `test_a_long_gap_flags_late_maturity` (16-day gap) |
+| An interrupted run resumes without re-billing in the same UTC day | `tests/test_runs.py`: `test_interrupted_run_resumes_without_recollecting_or_rebilling`, `test_second_run_same_utc_day_bills_only_new_reads`; on the real account a second run the same UTC day was billed $0 |
+| Every as-of forecast recomputes bit-for-bit from its manifest and doesn't change when later captures are perturbed | `tests/test_m1_acceptance.py`: `test_as_of_forecasts_recompute_and_ignore_perturbed_later_captures` |
+| A planned post's forecast is frozen before its `created_at` | `tests/test_m1_acceptance.py`: `test_planned_post_forecast_is_frozen_before_the_post_and_scored`; `tests/test_mcp.py`: `test_register_planned_post_freezes_and_guards` |
+| A member connects, runs and reads last week from Claude Code | Connect and real runs verified on the owner's account on 2026-11-25 (18 posts: 17 reposts and 1 reply; labels from Claude Code; backup written to the configured synced folder). The Claude Code read goes through the MCP server: a contract test per tool in `tests/test_mcp.py`, and a stdio smoke test against the real connected database (initialize, list tools, `get_briefing`, `get_posts`) |
+
+Also checked: the pipeline recovers a non-prior maturity curve within 5% (`test_pipeline_recovers_a_non_prior_maturity_curve`), and the curve fit over 20 replicates per curve (`tests/test_m1_models.py`).
+
+**Not yet verified:**
+- A whole session inside Claude Code (`claude mcp add`, then the `weekly_review` prompt) is not recorded; only the stdio smoke test is.
+- The full `scripts/check.sh` (with end to end) last passed at `e6c35f7` (120 tests, 15 e2e). The two later commits record 123 tests and the MCP contract tests, not a full run.
+- The live GitHub `param.rs` call is mocked in tests; a real call is not recorded.
+- The day-1 and day-2 probes on a real account, and whether a refresh token survives 7 days unused, are not recorded yet.
+- The owner's account has no original post yet, so no original post has been forecast and scored on real data.
+
 ---
 
 ## 10. Testing
@@ -319,6 +357,14 @@ Estimates assume one engineer with coding agents.
 | Setup screen | Replaced by `socialmgr connect` (revision 5) |
 | Database | SQLite instead of PostgreSQL (revision 5) |
 | Extensibility | Peers, other or self-adapting models, other platforms and hosting must land later without rework: interfaces and multi-account schema from M0 (§13) |
+| Reposts | Stored, but never forecast, scored, LLM-labelled, shown on Posts or counted: they are someone else's content and X reports 0 impressions for them (M1) |
+| First-run back-fill | Posts made before the first run (the 30-day back-fill) take the earliest follower count instead of 0, flagged in the manifest as `followers_source=first_run_backfill` (M1) |
+| Billing | Billable reads are charged once per resource per UTC day (`resource_reads`), so a re-run or resumed run the same UTC day isn't billed again; collection stops at the monthly cap (M1) |
+| Confidence | Capped at "too early" while forecasts are prior-only, whatever the post count (M1) |
+| M1 models | Prior-only NB2 (§2a priors, `prior_only_uncalibrated`) is the champion; the trailing median runs as challenger and is the baseline for the M3 release gates (M1) |
+| Maturity curve | Two-parameter Weibull, MAP fit from capture pairs with the BetaBinomial pair likelihood (MODEL §1.3); the prior curve until 30 pairs; each forecast keeps the curve version frozen with it. Curve-parameter uncertainty in the predictive draws is deferred (M1) |
+| Regimes | The latest commit touching `param.rs` in `xai-org/x-algorithm`, via the GitHub API, opens a regime; classifying the change and sync-header dates are deferred (M1) |
+| Labeller sandbox | Headless Claude Code runs from the system temp folder, outside any project, so a repository's `CLAUDE.md`, hooks or settings can't change the labelling call; a missing structured result falls back to the text result, and a failure reports its reason as a briefing caveat (M1) |
 
 ---
 
