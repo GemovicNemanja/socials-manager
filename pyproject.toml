@@ -28,7 +28,6 @@ api = [
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",
@@ -61,7 +60,7 @@ plugins = ["pydantic.mypy"]
 files = ["socialmgr"]
 
 [[tool.mypy.overrides]]
-module = ["alembic.*"]
+module = ["alembic.*", "anthropic", "anthropic.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -24,6 +24,7 @@ from socialmgr.core.types import (
 from socialmgr.db.models import (
     Account,
     Cost,
+    FollowerId,
     FollowerSnapshot,
     Forecast,
     Label,
@@ -193,6 +194,45 @@ def _bill(
     return cost
 
 
+KNOWN_FOLLOWERS_SENT = 50
+
+
+def _recent_follower_ids(session: Session, account_id: int) -> tuple[str, ...]:
+    return tuple(
+        session.scalars(
+            select(FollowerId.external_id)
+            .where(FollowerId.account_id == account_id)
+            .order_by(FollowerId.id.desc())
+            .limit(KNOWN_FOLLOWERS_SENT)
+        )
+    )
+
+
+def _record_followers(
+    session: Session, settings: Settings, run: Run, account_id: int, ids: tuple[str, ...]
+) -> None:
+    known = set(
+        session.scalars(
+            select(FollowerId.external_id).where(
+                FollowerId.account_id == account_id, FollowerId.external_id.in_(ids)
+            )
+        )
+    )
+    # The list is newest first; insert oldest first so ``id`` order follows follow order.
+    for ext in reversed(ids):
+        if ext not in known:
+            known.add(ext)
+            session.add(
+                FollowerId(
+                    workspace_id=settings.workspace_id,
+                    account_id=account_id,
+                    external_id=ext,
+                    first_seen_run_id=run.id,
+                    first_seen_at=run.cutoff_at,
+                )
+            )
+
+
 def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: Run) -> CollectSummary:
     spent = month_spend(session, settings.workspace_id, run.cutoff_at)
     if spent >= settings.monthly_cap_usd:
@@ -214,10 +254,24 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
     cost = 0.0
     caveats: list[str] = []
     follower_counts: dict[int, int] = {}
+    new_follower_counts: dict[int, int] = {}
+    # Providers that refresh credentials do it now, before this session writes anything
+    # (SQLite allows one writer at a time; see providers/x/tokens.py).
+    for provider in plugins.providers:
+        prepare = getattr(provider, "prepare", None)
+        if callable(prepare):
+            for a in accounts:
+                if a.role in provider.roles:
+                    prepare(a.id)
     for provider in plugins.providers:
         refs = tuple(
             AccountRef(
-                account_id=a.id, platform=a.platform, handle=a.handle, role=a.role, external_id=a.external_id
+                account_id=a.id,
+                platform=a.platform,
+                handle=a.handle,
+                role=a.role,
+                external_id=a.external_id,
+                known_follower_ids=_recent_follower_ids(session, a.id),
             )
             for a in accounts
             if a.role in provider.roles
@@ -227,12 +281,17 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
         batch = provider.collect(
             CollectionRequest(accounts=refs, since=prev.cutoff_at if prev else None, until=run.cutoff_at)
         )
-        caveats += batch.caveats
         for fa in batch.accounts:
             acct = session.get(Account, fa.account_id)
             if acct is not None and acct.external_id is None:
                 acct.external_id = fa.external_id
             follower_counts.setdefault(fa.account_id, fa.followers)
+            known = next((r.known_follower_ids for r in refs if r.account_id == fa.account_id), ())
+            if fa.new_follower_ids is not None and known:  # without known ids it is only a baseline
+                new_follower_counts.setdefault(fa.account_id, len(fa.new_follower_ids))
+            if fa.new_follower_ids:
+                _record_followers(session, settings, run, fa.account_id, fa.new_follower_ids)
+        caveats += [f"{batch.provider}: {c}" for c in batch.caveats]
 
         post_ids: dict[str, int] = {}
         for fp in batch.posts:
@@ -329,6 +388,7 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
                 run_id=run.id,
                 fetched_at=run.cutoff_at,
                 followers=followers,
+                new_followers=new_follower_counts.get(account_id),
             )
         )
     session.flush()

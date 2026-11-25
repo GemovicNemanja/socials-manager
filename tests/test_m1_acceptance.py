@@ -94,16 +94,16 @@ def test_as_of_forecasts_recompute_and_ignore_perturbed_later_captures(tmp_path:
         late_cutoff = UNTIL + timedelta(days=1)
         run = pipeline.start_run(session, settings, "test", cutoff=late_cutoff, now=late_cutoff)
         rng = np.random.default_rng(0)
-        for post in session.scalars(select(Post)):
+        for perturbed in session.scalars(select(Post)):
             session.add(
                 MetricSnapshot(
                     workspace_id=1,
-                    post_id=post.id,
+                    post_id=perturbed.id,
                     run_id=run.id,
                     provider="perturbed",
                     impressions_source="impression_count",
                     fetched_at=late_cutoff,
-                    age_s=int((late_cutoff - post.created_at).total_seconds()),
+                    age_s=int((late_cutoff - perturbed.created_at).total_seconds()),
                     impressions=int(rng.integers(0, 10**6)),
                     likes=0,
                     reposts=0,

@@ -345,3 +345,16 @@ class Briefing(WorkspaceMixin, Base):
     created_at: Mapped[datetime]
     summary: Mapped[str] = mapped_column(Text)
     data: Mapped[dict[str, Any]]
+
+
+class FollowerId(WorkspaceMixin, Base):
+    """Followers seen so far, so a run pages the newest-first list only until a known one (§5)."""
+
+    __tablename__ = "follower_ids"
+    __table_args__ = (UniqueConstraint("account_id", "external_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    external_id: Mapped[str] = mapped_column(String(64))
+    first_seen_run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
+    first_seen_at: Mapped[datetime]

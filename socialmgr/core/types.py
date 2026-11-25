@@ -36,6 +36,9 @@ class AccountRef(Frozen):
     handle: str
     role: AccountRole
     external_id: str | None = None
+    # Recently seen follower ids. A provider with FOLLOWER_LISTS pages the newest-first follower
+    # list only until one of these appears; empty means "no baseline yet".
+    known_follower_ids: tuple[str, ...] = ()
 
 
 class FetchedAccount(Frozen):
@@ -44,6 +47,10 @@ class FetchedAccount(Frozen):
     handle: str
     followers: int
     fetched_at: datetime
+    # Followers newer than the newest known one, newest first. None when not collected or incomplete
+    # (e.g. rate limited). With no known_follower_ids on the request this is a baseline sample, not
+    # "new" followers.
+    new_follower_ids: tuple[str, ...] | None = None
 
 
 class FetchedPost(Frozen):

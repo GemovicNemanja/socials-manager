@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from socialmgr.core.config import PluginConfig, RunConfig, Settings
 from socialmgr.core.types import ForecastSubject, PriorContext
 from socialmgr.db import migrate
-from socialmgr.db.models import Regime
+from socialmgr.db.models import Post, Regime
 from socialmgr.db.session import make_engine, session_factory
 from socialmgr.modelling import maturity
 from socialmgr.modelling.models.nb2 import NB2PriorModel
@@ -141,9 +141,7 @@ def test_planned_post_guardrails(tmp_path: Path) -> None:
     plugins = load_plugins(settings)
     load_fixture(session, settings, plugins, until=datetime(2026, 10, 20, 6, tzinfo=UTC))
     now = datetime(2026, 10, 20, 8, tzinfo=UTC)
-    existing = session.execute(
-        select(planned.Post.text).where(planned.Post.text.is_not(None)).limit(1)
-    ).scalar_one()
+    existing = session.execute(select(Post.text).where(Post.text.is_not(None)).limit(1)).scalar_one()
 
     with pytest.raises(ValueError, match="future"):
         planned.register_planned_post(
