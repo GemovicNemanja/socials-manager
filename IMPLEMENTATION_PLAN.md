@@ -223,6 +223,8 @@ Also deferred: the suppression HMM, bandits and off-policy evaluation, embedding
 
 Kept as MODEL §6 specifies: slots registered for whole local days up to 7 days ahead; treatment-blind forecast frozen before a seeded draw blocked within the day; matching by slot tag or nearest planned time within ±30 min; intention to treat; the analysis model and a 9,999-draw randomization test; the decision rule evaluated at the first run after each experiment-week boundary; at most one 50% extension; arm-harm and unfollow guardrails as confidence sequences; e-LOND at FDR 0.10, the only route to "confirmed"; the three-number power preview.
 
+**Concurrent experiments** (MODEL §6.1, §6.2, §6.6; confirmed with the owner 2026-11-25): up to 3 per-post factors run at once as a factorial. Each slot draws every factor's arm independently (π = 0.5, blocked within the day), so every post informs every factor and each one reaches its sample size as fast as if it ran alone. The analysis model estimates one effect per factor (Σ τ_k A_ik) on the same posts, and the readout reports each factor separately. Interactions aren't estimated by default (they cost power); the carryover term λ and `own_posts_48h` flag interference. At most one time-level (switchback) experiment runs at a time, and a frequency experiment never overlaps a per-post impressions experiment unless the per-post design is blocked within each frequency condition. A 4th concurrent experiment needs the owner's approval. Each experiment's conclusion enters the e-LOND stream on its own (FDR 0.10).
+
 **Simplified:**
 - Designs: per-post micro-randomization and 4-day switchbacks. Account-level designs are deferred.
 - Suggestions: E01–E09 preloaded. E10–E11 (other accounts) and E12 (Premium) are dropped.
