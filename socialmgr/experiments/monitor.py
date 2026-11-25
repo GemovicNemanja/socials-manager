@@ -297,12 +297,19 @@ def unfollow_rates(
 
 def unfollow_breach(baseline: list[float], during: list[float], alpha: float = 0.05) -> tuple[bool, float]:
     """Lower confidence-sequence bound on the mean log ratio of unfollows to the baseline mean;
-    a breach when it clears log 1.25. Needs 3 baseline and 3 experiment intervals."""
+    a breach when it clears log 1.25. Needs 3 baseline and 3 experiment intervals.
+
+    Unfollows give one value per run interval (a handful per experiment), too few for the
+    variance-free bound arm harm uses, so the scale comes from the pre-experiment baseline (which
+    is independent of the experiment period), floored at 0.25 on the log scale."""
     if len(baseline) < 3 or len(during) < 3:
         return False, -math.inf
     base = sum(baseline) / len(baseline)
+    base_logs = [math.log((1 + r) / (1 + base)) for r in baseline]
+    mean_b = sum(base_logs) / len(base_logs)
+    sigma = max(math.sqrt(sum((v - mean_b) ** 2 for v in base_logs) / (len(base_logs) - 1)), 0.25)
     values = [math.log((1 + r) / (1 + base)) for r in during]
-    lower = -stats.cs_upper_bound([-v for v in values], alpha)
+    lower = -stats.cs_upper_bound_known_scale([-v for v in values], sigma, alpha)
     return lower > UNFOLLOW_THRESHOLD, lower
 
 

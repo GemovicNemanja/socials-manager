@@ -87,10 +87,10 @@ def test_four_week_experiment_looks_at_week_boundaries_and_ends_in_e_lond(
     entries = session.scalars(select(ELondEntry)).all()
     assert len(entries) == 1 and entries[0].t == 1 and entries[0].factor == "hook"
     entry = entries[0]
-    # The e-value is the mSPRT likelihood ratio once stats has it (else the p calibrator, pre-merge).
+    # The e-value e-LOND gets is the mSPRT likelihood ratio (MODEL §6.7).
     obs = monitor.observations(session, settings, exp)["hook"]
     e, kind = stats_compat.e_value(obs, "hook", hook["randomization_p"])
-    assert (entry.e_value, entry.e_kind) == (pytest.approx(e), kind)
+    assert entry.e_value == pytest.approx(e) and entry.e_kind == kind
     fresh = stats_compat.elond(0.10, 0, 0, [], None)
     assert entry.rejected == fresh.test(entry.e_value)
     assert entry.alpha_t == pytest.approx(fresh.history[0]["alpha_t"])

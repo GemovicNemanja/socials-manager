@@ -89,11 +89,11 @@ def test_auto_start_vs_approval(ws: tuple[Session, Settings, ActivePlugins]) -> 
         session,
         settings,
         plugins,
-        actor="agent",
+        actor="owner",
         now=NOW,
         spec=_custom("SIX", FactorSpec(name="cta", lever="cta", control="none", treatment="follow"), weeks=6),
     )
-    assert six.experiment.status == "scheduled"  # up to 8 weeks starts directly (plan §7)
+    assert six.experiment.status == "scheduled"  # the owner's own 6-week experiment starts directly
     # A 4th concurrent experiment, and a 4th per-post factor, wait for the owner.
     fourth = engine.propose_experiment(
         session, settings, plugins, actor="agent", now=NOW, suggestion_key="E07"
@@ -200,3 +200,19 @@ def test_extension_once_and_stop(ws: tuple[Session, Settings, ActivePlugins]) ->
     # Treated, unposted slots revert to control.
     for slot in session.scalars(select(PlannedSlot).where(PlannedSlot.experiment_id.is_not(None))):
         assert all(v == 0 for v in engine.effective_arms(session, slot.id).values())
+
+
+def test_an_agent_can_auto_start_only_up_to_four_weeks(ws: tuple[Session, Settings, ActivePlugins]) -> None:
+    """MODEL §6.9: agents may auto-start horizons up to 4 weeks; longer ones wait for the owner."""
+    session, settings, plugins = ws
+    lever = FactorSpec(name="cta", lever="cta", control="none", treatment="follow")
+    four = engine.propose_experiment(
+        session, settings, plugins, actor="agent", now=NOW, spec=_custom("FOUR", lever, weeks=4)
+    )
+    assert four.experiment.status == "scheduled"
+    engine.stop_experiment(session, settings, "FOUR", reason="test", actor="agent", now=NOW)
+    six = engine.propose_experiment(
+        session, settings, plugins, actor="agent", now=NOW, spec=_custom("SIXA", lever, weeks=6)
+    )
+    assert six.experiment.status == "pending_approval" and six.approval is not None
+    assert any("agents may start up to 4" in r for r in six.reasons)

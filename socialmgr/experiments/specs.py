@@ -16,7 +16,8 @@ Actor = Literal["agent", "owner"]
 
 MAX_FACTORS = 3  # MODEL §6.1: up to 3 per-post factors run factorially on the same posts
 MAX_CONCURRENT = 3  # MODEL §6.9: a 4th concurrent experiment needs the owner
-AUTO_START_MAX_WEEKS = 8.0  # MODEL §6.9 / plan §7: horizons over 8 weeks need the owner
+AUTO_START_MAX_WEEKS = 8.0  # MODEL §6.9: horizons over 8 weeks always need the owner's approval
+AGENT_AUTO_START_MAX_WEEKS = 4.0  # MODEL §6.9: an agent may auto-start horizons up to 4 weeks
 MAX_DAYS_AHEAD = 7  # MODEL §6.1: slots are registered for whole local days, up to 7 days ahead
 SWITCHBACK_BLOCK_DAYS = 4  # MODEL §6.1: 2 washout days, then 2 measured days
 SWITCHBACK_WASHOUT_DAYS = 2

@@ -124,7 +124,12 @@ def simulate(
             register_ahead(session, settings, plugins, cut + timedelta(hours=1), log)
         cut += timedelta(days=1)
         out = runs.execute(
-            session, settings, plugins, clock=lambda c=cut: c, cutoff=cut, skip=frozenset({"backup"})
+            session,
+            settings,
+            plugins,
+            clock=lambda c=cut: c,  # type: ignore[misc]
+            cutoff=cut,
+            skip=frozenset({"backup"}),
         )
         result = out.steps["experiments"]["result"]
         log.runs.append((cut, result))

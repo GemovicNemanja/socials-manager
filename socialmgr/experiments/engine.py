@@ -1,7 +1,8 @@
 """The experiment engine (MODEL.md §6, plan §7): protocols, approvals and slot registration.
 
 - ``propose_experiment`` / ``schedule_experiment`` apply MODEL §6.9's permissions: per-post levers,
-  up to 3 factors, π = 0.5 and horizons up to 8 weeks start directly; horizons over 8 weeks, a 4th
+  up to 3 factors, π = 0.5 and horizons up to 4 weeks (8 when the owner proposes) start directly;
+  agent proposals over 4 weeks, horizons over 8 weeks, a 4th
   concurrent experiment (or more than 3 per-post factors at once), levers outside the approved
   list, and cadence changes over ±1 post a day wait for the owner as a pending approval.
 - ``amend_experiment`` writes a new protocol version; changes to a frozen field (metric, model, δ,
@@ -44,6 +45,7 @@ from socialmgr.db.models import (
 )
 from socialmgr.experiments import stats
 from socialmgr.experiments.specs import (
+    AGENT_AUTO_START_MAX_WEEKS,
     AUTO_START_MAX_WEEKS,
     LEVERS,
     MAX_CONCURRENT,
@@ -354,6 +356,8 @@ def approval_reasons(session: Session, settings: Settings, exp: Experiment) -> l
     reasons = []
     if exp.horizon_weeks > AUTO_START_MAX_WEEKS:
         reasons.append(f"horizon of {exp.horizon_weeks:g} weeks is over 8 weeks")
+    elif exp.created_by == "agent" and exp.horizon_weeks > AGENT_AUTO_START_MAX_WEEKS:
+        reasons.append(f"an agent proposed a {exp.horizon_weeks:g}-week horizon (agents may start up to 4)")
     others = _concurrent(session, settings, exclude_id=exp.id)
     if len(others) >= MAX_CONCURRENT:
         reasons.append(f"it would be experiment {len(others) + 1} running at once (more than 3)")

@@ -624,6 +624,22 @@ def cs_upper_bound(values: Sequence[float], alpha: float = 0.05, rho: float = 1.
     return float(cs_upper_from_stats(float(len(x)), m, float(np.sum((x - m) ** 2)), alpha, rho))
 
 
+def cs_upper_bound_known_scale(
+    values: Sequence[float], sigma: float, alpha: float = 0.05, rho: float = 1.0
+) -> float:
+    """One-sided normal-mixture confidence sequence (Howard et al.) for the mean of sigma-sub-Gaussian
+    values with a scale fixed in advance: valid at every look. For short streams (a handful of run
+    intervals) where the self-normalized bound above can't rule anything out; ``sigma`` must come
+    from data independent of ``values`` (e.g. a pre-experiment baseline). +inf with no values."""
+    x = np.asarray(values, dtype=float)
+    t = len(x)
+    if t == 0:
+        return math.inf
+    v = t * sigma**2
+    radius = math.sqrt(2 * (v + rho) * math.log(math.sqrt((v + rho) / rho) / alpha)) / t
+    return float(x.mean() + radius)
+
+
 def _block_contrasts(values: Sequence[float], blocks: Sequence[str], arms: Sequence[int]) -> list[float]:
     order: list[str] = []
     seen: dict[str, tuple[list[float], list[float]]] = {}

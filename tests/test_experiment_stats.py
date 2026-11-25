@@ -222,7 +222,9 @@ def test_decide_follows_the_rule_table() -> None:
 def test_decision_codes_agree_with_decide() -> None:
     rng = np.random.default_rng(0)
     for _ in range(200):
-        post = posterior(float(rng.normal(0.1, 0.3)), float(rng.uniform(0.05, 0.4)), int(rng.integers(1e6)))
+        post = posterior(
+            float(rng.normal(0.1, 0.3)), float(rng.uniform(0.05, 0.4)), int(rng.integers(1_000_000))
+        )
         for at_h in (False, True):
             lo, hi = post.interval(0.8)
             code = decision_codes(
@@ -315,7 +317,7 @@ def test_elond_levels_and_bookkeeping() -> None:
 
 def test_elond_gamma_sequences_sum_to_at_most_one_and_legacy_streams_keep_theirs() -> None:
     for kind in ("1/(t(t+1))", "6/(pi^2 t^2)"):
-        el = ELond(gamma_sequence=kind)  # type: ignore[arg-type]
+        el = ELond(gamma_sequence=kind)
         assert sum(el.gamma(t) for t in range(1, 200_000)) <= 1.0
     legacy = ELond.from_dict({"alpha": 0.1, "tests": 0, "rejections": 0, "history": []})
     assert legacy.gamma_sequence == "6/(pi^2 t^2)"
@@ -330,7 +332,7 @@ def test_e_values() -> None:
     # the mixture likelihood ratio has mean 1 under H0
     z = np.linspace(-10, 10, 4001)
     vals = np.array([msprt_e_value(float(x) * 0.2, 0.2) for x in z])
-    assert abs(np.trapezoid(vals * sps.norm.pdf(z), z) - 1) < 1e-3
+    assert abs(float(np.trapezoid(vals * sps.norm.pdf(z), z)) - 1) < 1e-3
 
 
 @pytest.mark.parametrize(("rho", "null_share"), [(0.0, 0.7), (0.6, 0.7), (0.0, 1.0)])
@@ -455,7 +457,7 @@ def test_old_three_consecutive_rule_tripped_29_to_44_percent() -> None:
 # ---------------------------------------------------------------- power preview (MODEL §6.8)
 
 # n: {R²: (power at 1.25x, 1.5x, 2x, MDE or None)}
-POWER_TABLE = {
+POWER_TABLE: dict[int, dict[float, tuple[float, float, float, float | None]]] = {
     42: {0.0: (0.09, 0.21, 0.50, 2.59), 0.3: (0.11, 0.28, 0.65, 2.22), 0.5: (0.15, 0.36, 0.80, 1.96)},
     84: {0.0: (0.14, 0.38, 0.80, 1.96), 0.3: (0.21, 0.50, 0.92, 1.76), 0.5: (0.25, 0.65, 0.98, 1.61)},
     168: {0.0: (0.26, 0.66, 0.98, 1.61), 0.3: (0.35, 0.81, 1.0, 1.49), 0.5: (0.46, 0.92, 1.0, 1.40)},
@@ -506,3 +508,15 @@ def test_false_adoption_in_batch_mode_with_maturity_lag() -> None:
     adoption at a true null stays within ±3 points of 2.3% (1,000 experiments)."""
     res = sim.simulate_decision_rule(1.0, 1000, seed=91, maturity_lag_days=2)
     assert abs(res.p_adopt - SIMULATION_F[1.0]) <= 0.03
+
+
+def test_known_scale_cs_covers_the_mean_at_every_look() -> None:
+    from socialmgr.experiments.stats import cs_upper_bound_known_scale
+
+    rng = np.random.default_rng(3)
+    misses = 0
+    for _ in range(2000):
+        x = rng.normal(0.0, 1.0, 40)
+        if any(cs_upper_bound_known_scale(x[:t].tolist(), 1.0) < 0.0 for t in range(1, 41)):
+            misses += 1
+    assert misses / 2000 <= 0.05  # time-uniform: the true mean 0 is below the bound at every look
