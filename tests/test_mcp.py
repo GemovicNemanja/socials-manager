@@ -81,7 +81,7 @@ def test_get_briefing_and_run_status(server: Any) -> None:
     assert b["data_sufficiency"]["reason"] == "prior_only_uncalibrated"
     status = call(server, "get_run_status")
     assert status["unfinished"] is None and status["latest"]["status"] == "finished"
-    assert [s["status"] for s in status["latest"]["steps"]][:-1] == ["done"] * 8  # backup skipped in fixtures
+    assert [s["status"] for s in status["latest"]["steps"]][:-1] == ["done"] * 9  # backup skipped in fixtures
 
 
 def test_start_run_collects_and_returns_a_new_briefing(server: Any, mcp_settings: Settings) -> None:

@@ -6,6 +6,7 @@ window return the same data, and a later run sees the same posts at an older age
 
 import hashlib
 import math
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
@@ -49,6 +50,11 @@ OPENERS = (
     "Why I changed",
 )
 MAX_AGE = timedelta(days=30)
+
+# A simulation hook: given a synthetic post and its true I48, return the post (e.g. with its type
+# changed) and the I48 the world actually delivers. Experiment simulations use it to make outcomes
+# react to a slot's arms. Without a hook the provider's output is unchanged.
+PostHook = Callable[[FetchedPost, float], tuple[FetchedPost, float]]
 
 
 def _rng(*parts: object) -> np.random.Generator:
@@ -125,11 +131,13 @@ class _FakeProvider:
         start: datetime = DEFAULT_START,
         growth_per_day: float = 9.6,
         curve: Curve = PRIOR,
+        post_hook: PostHook | None = None,
     ) -> None:
         self.seed = seed
         self.start = start
         self.growth = growth_per_day
         self.curve = curve  # the true maturity curve the synthetic trajectories follow
+        self.post_hook = post_hook
 
     def collect(self, request: CollectionRequest) -> CollectionBatch:
         accounts, posts, metrics = [], [], []
@@ -154,9 +162,10 @@ class _FakeProvider:
             )
             window_start = request.until - MAX_AGE
             for day in _days(max(window_start, self.start), request.until):
-                for post, i48 in acct.posts_on(day):
-                    if not window_start < post.created_at <= request.until:
+                for raw_post, raw_i48 in acct.posts_on(day):
+                    if not window_start < raw_post.created_at <= request.until:
                         continue
+                    post, i48 = self.post_hook(raw_post, raw_i48) if self.post_hook else (raw_post, raw_i48)
                     if request.since is None or post.created_at > request.since:
                         posts.append(post)
                     metrics.append(self._metrics(post, i48, request.until))
