@@ -50,6 +50,14 @@ APPEND_ONLY_TABLES = (
     "protocol_versions",
     "assignments",
     "elond_stream",
+    # Model health, followers and goals (M3): every review, nowcast, monitor state, follower
+    # forecast, follower score and goal status is kept as history.
+    "model_reviews",
+    "nowcasts",
+    "monitor_states",
+    "follower_forecasts",
+    "follower_scores",
+    "goal_statuses",
 )
 
 
@@ -207,6 +215,8 @@ class ModelVersion(WorkspaceMixin, Base):
     code_version: Mapped[str] = mapped_column(String(32))
     role: Mapped[str] = mapped_column(String(16))  # champion | challenger | retired
     created_at: Mapped[datetime]
+    promoted_at: Mapped[datetime | None]
+    retired_at: Mapped[datetime | None]
 
 
 class Forecast(WorkspaceMixin, Base):
@@ -525,3 +535,159 @@ class Approval(WorkspaceMixin, Base):
     decided_by: Mapped[str | None] = mapped_column(String(16))
     decided_at: Mapped[datetime | None]
     note: Mapped[str | None] = mapped_column(Text)
+
+
+# ---------------------------------------------------------------- model health, followers, goals (M3)
+
+
+class ModelReview(WorkspaceMixin, Base):
+    """One promotion review (MODEL §5): LFO-CV backtest, release gates and the decision.
+
+    The champion is the latest review's ``champion_after``; a failed gate keeps the previous one.
+    """
+
+    __tablename__ = "model_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"), index=True)
+    owner_n: Mapped[int] = mapped_column(Integer)
+    candidate_plugin: Mapped[str] = mapped_column(String(128))
+    candidate_version: Mapped[str | None] = mapped_column(String(128))
+    champion_before: Mapped[str] = mapped_column(String(128))  # plugin name
+    champion_after: Mapped[str] = mapped_column(String(128))  # plugin name
+    decision: Mapped[str] = mapped_column(String(16))  # promoted | held | not_eligible | kept
+    reason: Mapped[str] = mapped_column(Text)
+    gates: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    backtest: Mapped[dict[str, Any]]
+    created_at: Mapped[datetime]
+
+
+class Nowcast(WorkspaceMixin, Base):
+    """A provisional I48 estimate for a post younger than 48h at a run (MODEL §2b, §4.1)."""
+
+    __tablename__ = "nowcasts"
+    __table_args__ = (UniqueConstraint("post_id", "run_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"))
+    capture_age_h: Mapped[float] = mapped_column(Float)
+    method: Mapped[str] = mapped_column(String(32))
+    quantiles: Mapped[dict[str, Any]]
+    p_gt_median: Mapped[float] = mapped_column(Float)
+    median_pre: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime]
+
+
+class MonitorState(WorkspaceMixin, Base):
+    """A detector's state after a run (MODEL §4.3): D1 charts, D2, D3 and diagnostics."""
+
+    __tablename__ = "monitor_states"
+    __table_args__ = (UniqueConstraint("run_id", "chart"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"), index=True)
+    chart: Mapped[str] = mapped_column(String(32))
+    armed: Mapped[bool] = mapped_column(Boolean)
+    stat: Mapped[float | None] = mapped_column(Float)
+    threshold: Mapped[float | None] = mapped_column(Float)
+    alarm: Mapped[bool] = mapped_column(Boolean)
+    state: Mapped[dict[str, Any]]
+    created_at: Mapped[datetime]
+
+
+class Alarm(WorkspaceMixin, Base):
+    """A detector alarm. The owner (or an agent) acknowledges it; nothing else changes."""
+
+    __tablename__ = "alarms"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chart: Mapped[str] = mapped_column(String(32), index=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"))
+    raised_at: Mapped[datetime]
+    direction: Mapped[str | None] = mapped_column(String(8))  # up | down
+    stat: Mapped[float | None] = mapped_column(Float)
+    threshold: Mapped[float | None] = mapped_column(Float)
+    attribution: Mapped[str] = mapped_column(String(16))  # platform | owner | unknown
+    detail: Mapped[dict[str, Any]]
+    acknowledged_at: Mapped[datetime | None]
+    acknowledged_by: Mapped[str | None] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class Goal(WorkspaceMixin, Base):
+    """A goal the member set (MODEL §4.2). A change supersedes the old row; nothing is deleted."""
+
+    __tablename__ = "goals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    scope: Mapped[str] = mapped_column(String(16))  # posts | followers
+    metric: Mapped[str] = mapped_column(String(32))  # impressions_48h | followers
+    target: Mapped[float] = mapped_column(Float)
+    horizon_days: Mapped[int | None] = mapped_column(Integer)  # followers: F at today + horizon
+    target_at: Mapped[datetime | None]
+    created_by: Mapped[str] = mapped_column(String(16))  # web | cli | agent
+    created_at: Mapped[datetime]
+    superseded_at: Mapped[datetime | None]
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class GoalStatus(WorkspaceMixin, Base):
+    """A goal's status at a run, with hysteresis (MODEL §4.2). Kept as history."""
+
+    __tablename__ = "goal_statuses"
+    __table_args__ = (UniqueConstraint("goal_id", "run_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    goal_id: Mapped[int] = mapped_column(ForeignKey("goals.id"), index=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"))
+    status: Mapped[str] = mapped_column(String(16))  # working | near | not_working
+    reason: Mapped[str | None] = mapped_column(String(32))
+    p_hi: Mapped[float | None] = mapped_column(Float)
+    p_lo: Mapped[float | None] = mapped_column(Float)
+    since: Mapped[datetime]
+    previous_status: Mapped[str | None] = mapped_column(String(16))
+    detail: Mapped[dict[str, Any]]
+    created_at: Mapped[datetime]
+
+
+class FollowerForecast(WorkspaceMixin, Base):
+    """A follower forecast frozen at a run (MODEL §2c), scored when its horizon passes."""
+
+    __tablename__ = "follower_forecasts"
+    __table_args__ = (UniqueConstraint("run_id", "account_id", "horizon_days"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # prior_only | calibrated
+    model_version: Mapped[str] = mapped_column(String(128))
+    start_at: Mapped[datetime]
+    start_followers: Mapped[int] = mapped_column(Integer)
+    horizon_days: Mapped[int] = mapped_column(Integer)
+    target_at: Mapped[datetime]
+    quantiles: Mapped[dict[str, Any]]
+    goal_id: Mapped[int | None] = mapped_column(ForeignKey("goals.id"))
+    p_goal: Mapped[float | None] = mapped_column(Float)
+    input_manifest: Mapped[dict[str, Any]]
+    manifest_hash: Mapped[str] = mapped_column(String(64))
+    draws_hash: Mapped[str] = mapped_column(ForeignKey("forecast_draws.hash"))
+    frozen_at: Mapped[datetime]
+
+
+class FollowerScore(WorkspaceMixin, Base):
+    """How the follower count landed against a frozen follower forecast at its horizon."""
+
+    __tablename__ = "follower_scores"
+    __table_args__ = (UniqueConstraint("follower_forecast_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    follower_forecast_id: Mapped[int] = mapped_column(ForeignKey("follower_forecasts.id"))
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"))
+    observed_at: Mapped[datetime]
+    actual: Mapped[int] = mapped_column(Integer)
+    pit_mid: Mapped[float] = mapped_column(Float)
+    crps_log: Mapped[float] = mapped_column(Float)
+    outcome: Mapped[str] = mapped_column(String(16))  # above | as_expected | below
+    scored_at: Mapped[datetime]
