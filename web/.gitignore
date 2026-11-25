@@ -2,3 +2,5 @@ node_modules
 dist
 *.tsbuildinfo
 .vite
+e2e/.data/
+e2e/.results/
