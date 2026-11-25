@@ -41,7 +41,16 @@ class UTCDateTime(TypeDecorator[datetime]):
         return value.replace(tzinfo=UTC) if value is not None else None
 
 
-APPEND_ONLY_TABLES = ("metric_snapshots", "forecasts", "forecast_draws", "scores")
+APPEND_ONLY_TABLES = (
+    "metric_snapshots",
+    "forecasts",
+    "forecast_draws",
+    "scores",
+    # Experiments (MODEL §6): the protocol history, the drawn arms and the e-LOND stream.
+    "protocol_versions",
+    "assignments",
+    "elond_stream",
+)
 
 
 class Base(DeclarativeBase):
@@ -358,3 +367,161 @@ class FollowerId(WorkspaceMixin, Base):
     external_id: Mapped[str] = mapped_column(String(64))
     first_seen_run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
     first_seen_at: Mapped[datetime]
+
+
+# ---------------------------------------------------------------- experiments (MODEL §6)
+
+
+class Experiment(WorkspaceMixin, Base):
+    """A randomized experiment. The protocol's frozen fields (metric, model, δ) change only through
+    an approved amendment; every change writes a ``protocol_versions`` row."""
+
+    __tablename__ = "experiments"
+    __table_args__ = (UniqueConstraint("workspace_id", "key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    key: Mapped[str] = mapped_column(String(32))  # E01..E09 or a custom key
+    suggestion_key: Mapped[str | None] = mapped_column(String(8))
+    name: Mapped[str] = mapped_column(String(128))
+    hypothesis: Mapped[str] = mapped_column(Text)
+    design: Mapped[str] = mapped_column(String(16))  # per_post | switchback
+    factors: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    primary_metric: Mapped[str] = mapped_column(String(64))
+    delta: Mapped[float] = mapped_column(Float)
+    horizon_weeks: Mapped[float] = mapped_column(Float)
+    # draft | pending_approval | scheduled | active | paused | concluded | stopped
+    status: Mapped[str] = mapped_column(String(24), index=True)
+    protocol_version: Mapped[int] = mapped_column(Integer, default=1)
+    model_plugin: Mapped[str] = mapped_column(String(128))  # registry name of the frozen model
+    model_version: Mapped[str] = mapped_column(String(128))  # family@version of the frozen model
+    seed: Mapped[int] = mapped_column(Integer)
+    created_by: Mapped[str] = mapped_column(String(16))  # agent | owner
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+    scheduled_at: Mapped[datetime | None]
+    started_at: Mapped[datetime | None]  # local midnight of the first registered day, in UTC
+    concluded_at: Mapped[datetime | None]
+    extension_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    extension_offered_at: Mapped[datetime | None]
+    paused_arms: Mapped[dict[str, Any]] = mapped_column(default=dict)  # factor -> {at, bound}
+    pause_reason: Mapped[str | None] = mapped_column(Text)
+    decisions: Mapped[dict[str, Any]] = mapped_column(default=dict)  # factor -> terminal decision
+    outcome: Mapped[str | None] = mapped_column(Text)  # templated conclusion
+
+
+class ProtocolVersion(WorkspaceMixin, Base):
+    """Append-only history of an experiment's protocol."""
+
+    __tablename__ = "protocol_versions"
+    __table_args__ = (UniqueConstraint("experiment_id", "version"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(ForeignKey("experiments.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    protocol: Mapped[dict[str, Any]]
+    hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime]
+    created_by: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(Text)
+
+
+class Assignment(WorkspaceMixin, Base):
+    """Append-only: one drawn arm per (experiment, slot, factor), after the slot's blind forecast."""
+
+    __tablename__ = "assignments"
+    __table_args__ = (UniqueConstraint("experiment_id", "slot_id", "factor"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(ForeignKey("experiments.id"), index=True)
+    slot_id: Mapped[int] = mapped_column(ForeignKey("planned_slots.id"), index=True)
+    factor: Mapped[str] = mapped_column(String(64))
+    arm: Mapped[int] = mapped_column(Integer)  # 0 control, 1 treatment
+    block_key: Mapped[str] = mapped_column(String(64))
+    slot_key: Mapped[str] = mapped_column(String(32))  # local planned time, the seeded draw's key
+    measured: Mapped[bool] = mapped_column(Boolean, default=True)  # false on switchback washout days
+    protocol_version: Mapped[int] = mapped_column(Integer)
+    drawn_at: Mapped[datetime]
+    blind_forecast_id: Mapped[int] = mapped_column(ForeignKey("forecasts.id"))
+    blind_manifest_hash: Mapped[str] = mapped_column(String(64))
+    propensity: Mapped[float] = mapped_column(Float, default=0.5)
+
+
+class Deviation(WorkspaceMixin, Base):
+    """Departures from the drawn design: a slot reverted after a pause, a missed slot, a deleted
+    post, a post excluded by the owner. Readouts stay intention-to-treat."""
+
+    __tablename__ = "deviations"
+    __table_args__ = (UniqueConstraint("experiment_id", "slot_id", "factor", "kind"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(ForeignKey("experiments.id"), index=True)
+    slot_id: Mapped[int | None] = mapped_column(ForeignKey("planned_slots.id"))
+    factor: Mapped[str] = mapped_column(String(64), default="")  # "" when it concerns every factor
+    kind: Mapped[str] = mapped_column(
+        String(32)
+    )  # reverted_after_pause | missed_slot | deleted_post | excluded
+    detail: Mapped[str] = mapped_column(Text)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
+    created_at: Mapped[datetime]
+
+
+class Readout(WorkspaceMixin, Base):
+    """A look at an experiment: only at the first run after each experiment-week boundary, and
+    the final read at horizon + 48h (MODEL §6.3)."""
+
+    __tablename__ = "readouts"
+    __table_args__ = (UniqueConstraint("experiment_id", "look"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(ForeignKey("experiments.id"), index=True)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
+    look: Mapped[str] = mapped_column(String(16))  # week-1.. | horizon | final
+    experiment_week: Mapped[int] = mapped_column(Integer)
+    protocol_version: Mapped[int] = mapped_column(Integer)
+    factors: Mapped[dict[str, Any]]  # factor -> posterior summary, decision, randomization p
+    decision: Mapped[str] = mapped_column(String(24))  # continue | adopt | reject | near_threshold | mixed
+    randomization_p: Mapped[dict[str, Any]]  # factor -> p
+    health_checks: Mapped[dict[str, Any]]
+    final: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime]
+
+
+class ELondEntry(WorkspaceMixin, Base):
+    """Append-only e-LOND stream over every concluded confirmatory factor (MODEL §6.7)."""
+
+    __tablename__ = "elond_stream"
+    __table_args__ = (UniqueConstraint("workspace_id", "t"), UniqueConstraint("experiment_id", "factor"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(ForeignKey("experiments.id"), index=True)
+    factor: Mapped[str] = mapped_column(String(64))
+    t: Mapped[int] = mapped_column(Integer)
+    e_value: Mapped[float] = mapped_column(Float)
+    e_kind: Mapped[str] = mapped_column(String(16))  # msprt | p_calibrator (MODEL §6.7)
+    gamma_sequence: Mapped[str] = mapped_column(String(32))  # fixed for the whole stream
+    alpha: Mapped[float] = mapped_column(Float)
+    alpha_t: Mapped[float] = mapped_column(Float)
+    rejected: Mapped[bool] = mapped_column(Boolean)
+    randomization_p: Mapped[float] = mapped_column(Float)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
+    created_at: Mapped[datetime]
+
+
+class Approval(WorkspaceMixin, Base):
+    """An item MODEL §6.9 reserves for the owner. Decided only in the web app or the CLI."""
+
+    __tablename__ = "approvals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int | None] = mapped_column(ForeignKey("experiments.id"), index=True)
+    # start_experiment | amend_protocol | guardrail_override | exclude_posts
+    kind: Mapped[str] = mapped_column(String(32))
+    payload: Mapped[dict[str, Any]]
+    reasons: Mapped[list[str]] = mapped_column(JSON)
+    requested_by: Mapped[str] = mapped_column(String(16))  # agent | owner
+    requested_at: Mapped[datetime]
+    status: Mapped[str] = mapped_column(String(16), index=True)  # pending | approved | rejected
+    decided_by: Mapped[str | None] = mapped_column(String(16))
+    decided_at: Mapped[datetime | None]
+    note: Mapped[str | None] = mapped_column(Text)

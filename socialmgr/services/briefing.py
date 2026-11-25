@@ -52,7 +52,7 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
                 }
             )
     caveats: list[str] = []
-    for name in ("collect", "regimes", "label"):
+    for name in ("collect", "regimes", "label", "experiments"):
         caveats += result(name).get("caveats", [])
     previous = pipeline.last_finished_run(session, settings.workspace_id, before=run.cutoff_at)
     if previous is not None:
@@ -80,6 +80,7 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
         "planned": result("match_planned"),
         "upcoming": [{"slot": f"slot:{s.id}", "planned_at": s.planned_at.isoformat()} for s in upcoming],
         "curve_version": result("fit_curve").get("curve_version"),
+        "experiments": result("experiments"),
         "spend": {
             "run_usd": round(pipeline.run_spend(session, run.id), 4),
             "month_usd": round(pipeline.month_spend(session, settings.workspace_id, run.cutoff_at), 4),
@@ -87,6 +88,31 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
         },
         "caveats": caveats,
     }
+
+
+def experiment_lines(exp: dict[str, Any]) -> list[str]:
+    """Decisions, pauses and upcoming readouts. "Confirmed" appears only after an e-LOND rejection."""
+    lines = []
+    for c in exp.get("concluded", []):
+        lines.append(f"Experiment {c['experiment']} concluded: {c['outcome']}.")
+    for r in exp.get("readouts", []):
+        if r["look"] != "final" and not any(
+            c["experiment"] == r["experiment"] for c in exp.get("concluded", [])
+        ):
+            lines.append(
+                f"Experiment {r['experiment']} {r['look']} readout: {r['decision'].replace('_', ' ')}."
+            )
+    for p in exp.get("paused", []):
+        what = f"arm {p['factor']}" if p.get("factor") else "the whole experiment"
+        lines.append(
+            f"Experiment {p['experiment']}: {what} paused ({p['reason'].replace('_', ' ')}, bound "
+            f"{p['bound_ratio']:.2f}x); {p['reverted_slots']} planned slot(s) revert to control."
+        )
+    upcoming = exp.get("upcoming", [])
+    if upcoming:
+        nxt = ", ".join(f"{u['experiment']} {u['look']} after {u['at'][:10]}" for u in upcoming[:3])
+        lines.append(f"Next experiment readouts: {nxt}.")
+    return lines
 
 
 def summarize(data: dict[str, Any]) -> str:
@@ -114,6 +140,7 @@ def summarize(data: dict[str, Any]) -> str:
         lines.append(
             f"Planned posts: {planned.get('matched', 0)} published, {planned.get('missed', 0)} missed."
         )
+    lines += experiment_lines(data.get("experiments") or {})
     spend = data["spend"]
     lines.append(
         f"Spend: ${spend['run_usd']:.3f} this run, "
