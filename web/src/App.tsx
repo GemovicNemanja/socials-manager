@@ -1,14 +1,10 @@
 import { Sidebar } from "./layout/Sidebar";
-import { useRoute, type Route } from "./lib/router";
+import { useRoute } from "./lib/router";
+import { AccountPage } from "./pages/AccountPage";
+import { ExperimentsPage } from "./pages/ExperimentsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { PostsPage } from "./pages/PostsPage";
-
-const placeholders: Record<Exclude<Route, "posts" | "overview">, { title: string; milestone: string }> = {
-  account: { title: "Account", milestone: "M2" },
-  forecasts: { title: "Forecasts", milestone: "M3" },
-  experiments: { title: "Experiments", milestone: "M2" },
-};
 
 export function App() {
   const route = useRoute();
@@ -20,8 +16,12 @@ export function App() {
           <PostsPage />
         ) : route === "overview" ? (
           <OverviewPage />
+        ) : route === "experiments" ? (
+          <ExperimentsPage />
+        ) : route === "account" ? (
+          <AccountPage />
         ) : (
-          <PlaceholderPage {...placeholders[route]} />
+          <PlaceholderPage title="Forecasts" milestone="M3" />
         )}
       </main>
     </div>

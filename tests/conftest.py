@@ -2,6 +2,7 @@ import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
@@ -51,3 +52,14 @@ def loaded(settings: Settings, fixture_db: Path) -> Iterator[sessionmaker[Sessio
     engine = make_engine(settings)
     yield session_factory(engine)
     engine.dispose()
+
+
+@pytest.fixture
+def ws(tmp_path: Path, fixture_db: Path) -> Iterator[tuple[Session, Settings, Any]]:
+    """Experiment workspace: (session, settings, plugins whose fake provider reacts to arms)."""
+    from tests.experiment_sim import World, open_copy, sim_settings
+
+    settings = sim_settings(tmp_path)
+    session = open_copy(settings, fixture_db)
+    yield session, settings, World(session).plugins(settings)
+    session.close()

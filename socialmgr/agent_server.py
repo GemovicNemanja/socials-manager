@@ -4,8 +4,8 @@ Run with ``socialmgr mcp`` (stdio). Add it to Claude Code with:
 
     claude mcp add socialmgr -- uv run --directory /path/to/socials-manager socialmgr mcp
 
-No tool can post, like, reply or follow on X, edit a frozen forecast, or approve anything
-(IMPLEMENTATION_PLAN.md §8).
+No tool can post, like, reply or follow on X, edit a frozen forecast or assignment, or approve
+anything (IMPLEMENTATION_PLAN.md §8).
 """
 
 from collections.abc import Callable, Iterator
@@ -22,8 +22,11 @@ from socialmgr.core.config import Settings
 from socialmgr.core.types import PostType
 from socialmgr.db import migrate
 from socialmgr.db.session import make_engine, session_factory
+from socialmgr.experiments.engine import AmendRequest
+from socialmgr.experiments.specs import DayPlan, ExperimentSpec
 from socialmgr.modelling.regimes import Fetcher, github_fetcher
 from socialmgr.services import agent, briefing, planned, read_models
+from socialmgr.services import experiments as exp_services
 from socialmgr.services.plugins import ActivePlugins, load_plugins
 
 INSTRUCTIONS = """Social Manager tracks the member's own X account: every post gets a forecast frozen before
@@ -175,6 +178,87 @@ def create_server(
         with session() as s:
             return agent.export_data(s, settings, what, fmt)
 
+    # ------------------------------------------------------------ experiments (MODEL §6, M2)
+
+    @tool(READ)
+    def get_experiments(include_suggestions: bool = True) -> exp_services.ExperimentsResponse:
+        """All experiments (scheduled, active, paused, pending approval, concluded) and, optionally,
+        the E01-E09 suggestions with a three-number power preview for this account."""
+        with session() as s:
+            return exp_services.get_experiments(s, settings, include_suggestions)
+
+    @tool(READ)
+    def get_experiment(experiment: str) -> exp_services.ExperimentResponse:
+        """One experiment by key (e.g. "E03") or id: protocol and versions, assigned slots with arms
+        and blind-forecast ranges, guardrail state, deviations and the latest readout."""
+        with session() as s:
+            return exp_services.get_experiment(s, settings, experiment)
+
+    @tool(READ)
+    def power_check(
+        suggestion_key: str | None = None, spec: ExperimentSpec | None = None
+    ) -> exp_services.PowerResponse:
+        """Power at 1.25x / 1.5x / 2x and the 80%-power MDE for a suggestion or a custom spec, at this
+        account's posting rate (MODEL §6.8). Use it before proposing."""
+        with session() as s:
+            return exp_services.power_check(s, settings, suggestion_key, spec)
+
+    @tool(WRITE_LOCAL)
+    def propose_experiment(
+        suggestion_key: str | None = None, spec: ExperimentSpec | None = None, start: bool = True
+    ) -> exp_services.ProposeResponse:
+        """Propose an experiment from a suggestion (E01-E09) or a custom spec. Per MODEL §6.9 it starts
+        directly when it's per-post levers, at most 3 factors at once and a horizon up to 4 weeks;
+        otherwise it waits as a pending approval that only the owner can decide."""
+        with session() as s:
+            return exp_services.propose_experiment(s, settings, active, suggestion_key, spec, start)
+
+    @tool(WRITE_LOCAL)
+    def register_slots(
+        days: list[DayPlan], experiments: list[str] | None = None
+    ) -> exp_services.RegisterSlotsResponse:
+        """Register whole local days (up to 7 days ahead) of posting slots for running experiments.
+        For each slot the treatment-blind forecast is frozen first, then the arms are drawn; the
+        response says what to post in each slot. ``days``: [{day, slots: [{time, post_type, labels}]}]."""
+        with session() as s:
+            return exp_services.register_slots(s, settings, active, days, experiments)
+
+    @tool(WRITE_LOCAL)
+    def schedule_experiment(experiment: str) -> exp_services.ExperimentActionResponse:
+        """Schedule a draft experiment (applies the same approval rules as propose_experiment)."""
+        with session() as s:
+            return exp_services.schedule_experiment(s, settings, experiment)
+
+    @tool(WRITE_LOCAL)
+    def amend_experiment(experiment: str, changes: AmendRequest, reason: str) -> exp_services.AmendResponse:
+        """Amend a protocol (a new protocol version). Changes to frozen fields (metric, model, delta,
+        horizon), excluding posts and overriding a guardrail become pending approvals for the owner."""
+        with session() as s:
+            return exp_services.amend_experiment(s, settings, active, experiment, changes, reason)
+
+    @tool(WRITE_LOCAL)
+    def stop_experiment(experiment: str, reason: str) -> exp_services.ExperimentActionResponse:
+        """Stop an experiment for good: no more draws or readouts, and no e-value (an early stop isn't
+        confirmatory)."""
+        with session() as s:
+            return exp_services.stop_experiment(s, settings, experiment, reason)
+
+    @tool(READ)
+    def get_readout(experiment: str) -> exp_services.ReadoutResponse:
+        """The latest readout: each factor's effect as a ratio with its 80% interval, P(lift > 1.1x),
+        the decision (adopt / reject / near threshold / keep going), the randomization-test p,
+        health checks and whether e-LOND confirmed it. "Confirmed" only after an e-LOND rejection."""
+        with session() as s:
+            return exp_services.get_readout(s, settings, experiment)
+
+    @tool(READ)
+    def list_approvals(
+        status: Literal["pending", "approved", "rejected"] | None = "pending",
+    ) -> exp_services.ApprovalsResponse:
+        """Approvals waiting for the owner (or decided ones). Agents can't approve or reject."""
+        with session() as s:
+            return exp_services.list_approvals(s, settings, status)
+
     # ------------------------------------------------------------ resources and prompts
 
     @server.resource("socialmgr://briefing/latest", mime_type="text/plain")
@@ -199,7 +283,9 @@ def create_server(
         return (
             "Look at get_posts and get_schedule, then help me plan next week's posts. For each idea, call "
             "get_forecast with a draft to see its expected range and guardrails; when I confirm, call "
-            "register_planned_post so the forecast is frozen before I post. Keep originals 3h+ apart."
+            "register_planned_post so the forecast is frozen before I post. Keep originals 3h+ apart. "
+            "If experiments are running, use register_slots for the days instead, and tell me what each "
+            "slot's arms ask me to post."
         )
 
     return server

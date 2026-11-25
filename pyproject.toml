@@ -50,6 +50,7 @@ extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+allowed-confusables = ["×"]  # effect ratios read "1.38×" on the screens, as on the canvas
 
 [tool.ruff.lint.per-file-ignores]
 "socialmgr/db/migrations/versions/*" = ["E501"]
@@ -66,3 +67,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: replicated simulations with >= 1,000 replicates (minutes); run by scripts/check.sh in full mode or `pytest -m slow`",
+]

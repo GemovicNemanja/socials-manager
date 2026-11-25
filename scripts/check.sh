@@ -24,6 +24,9 @@ step "Web: lint, types, build"
 (cd web && pnpm --silent lint && pnpm --silent build >/dev/null)
 
 if [[ "${1:-}" != "--fast" ]]; then
+  step "Slow simulation tests (>= 1,000 replicates each)"
+  uv run pytest -q -m slow
+
   step "End to end: real backend + fixture data + browser"
   (cd web && pnpm --silent e2e)
 fi

@@ -178,6 +178,18 @@ class MatchSummary:
     missed: int = 0
 
 
+def _type_matches(slot: PlannedSlot, post_type: str) -> bool:
+    """An experiment slot randomizing quote vs original (MODEL §6.10 E04) matches either type."""
+    if post_type == slot.post_type:
+        return True
+    levers = {
+        f.get("lever")
+        for factors in ((slot.lever_context or {}).get("experiments") or {}).values()
+        for f in factors.values()
+    }
+    return "quote" in levers and {post_type, slot.post_type} <= {"original", "quote"}
+
+
 def match_planned(session: Session, settings: Settings, cutoff: datetime) -> MatchSummary:
     """Match published posts to planned slots: near-identical text within a day, else nearest time ±30 min."""
     summary = MatchSummary()
@@ -221,7 +233,7 @@ def match_planned(session: Session, settings: Settings, cutoff: datetime) -> Mat
             in_window = [
                 p
                 for p in candidates
-                if abs(p.created_at - slot.planned_at) <= MATCH_WINDOW and p.type == slot.post_type
+                if abs(p.created_at - slot.planned_at) <= MATCH_WINDOW and _type_matches(slot, p.type)
             ]
             if in_window:
                 chosen = min(in_window, key=lambda p: abs(p.created_at - slot.planned_at))

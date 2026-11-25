@@ -9,6 +9,11 @@ const EMPTY_DATA_DIR = "e2e/.data-empty";
  * read-only specs on PORT keep their stable counts. */
 const ACTIONS_PORT = 8797;
 const ACTIONS_DATA_DIR = "e2e/.data-actions";
+/** A fourth, mutable backend for the experiment specs: the fixture plus three weeks of a running
+ * E03 x E06 factorial (`socialmgr fixture --experiment-demo`), so readouts exist. Its own process,
+ * so starting experiments and registering slots can't collide with the actions specs. */
+const EXPERIMENTS_PORT = 8796;
+const EXPERIMENTS_DATA_DIR = "e2e/.data-experiments";
 /**
  * Pinned settings so a member's local .env (handle, time zone, backup folder, the real X provider)
  * never leaks in. Runs started from the browser use the fake provider, skip the GitHub regime check
@@ -19,11 +24,11 @@ const ENV = (dir: string) =>
   `SOCIALMGR_ACCOUNT__HANDLE=@your_account SOCIALMGR_ACCOUNT__TZ=UTC SOCIALMGR_PLUGINS__LABELER=none ` +
   `SOCIALMGR_PLUGINS__PROVIDERS='["fake_owner"]' SOCIALMGR_RUN__REGIME_CHECK=false SOCIALMGR_RUN__BACKUP=false`;
 
-const fixtureServer = (dir: string, port: number) => ({
+const fixtureServer = (dir: string, port: number, flags = "") => ({
   cwd: "..",
   command:
     `rm -rf web/${dir} && ` +
-    `${ENV(dir)} uv run socialmgr fixture --until 2026-11-25T06:00:00+00:00 && ` +
+    `${ENV(dir)} uv run socialmgr fixture --until 2026-11-25T06:00:00+00:00 ${flags} && ` +
     `${ENV(dir)} uv run socialmgr serve --port ${port}`,
   url: `http://127.0.0.1:${port}/api/health`,
   reuseExistingServer: false,
@@ -49,6 +54,7 @@ export default defineConfig({
   webServer: [
     fixtureServer(DATA_DIR, PORT),
     fixtureServer(ACTIONS_DATA_DIR, ACTIONS_PORT),
+    fixtureServer(EXPERIMENTS_DATA_DIR, EXPERIMENTS_PORT, "--experiment-demo"),
     {
       cwd: "..",
       command:
