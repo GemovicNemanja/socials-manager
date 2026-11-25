@@ -23,3 +23,15 @@ def test_intervals_chain_follower_counts_and_sum_increments(loaded: sessionmaker
         for i in intervals:
             if i.gains is not None:
                 assert i.losses is not None and i.losses >= 0
+
+
+def test_scored_posts_are_as_of_originals_once_each(loaded: sessionmaker[Session]) -> None:
+    from socialmgr.services.model_data import scored_posts
+
+    with loaded() as session:
+        rows = scored_posts(session, 1)
+        assert len(rows) > 60
+        assert len({r.post_id for r in rows}) == len(rows)
+        assert {r.type for r in rows} <= {"original", "quote"}
+        assert all(0 <= r.pit_rand <= 1 for r in rows)
+        assert [r.created_at for r in rows] == sorted(r.created_at for r in rows)
