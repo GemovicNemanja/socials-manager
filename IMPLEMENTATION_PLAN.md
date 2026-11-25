@@ -211,6 +211,14 @@ Also deferred: the suppression HMM, bandits and off-policy evaluation, embedding
 
 ---
 
+**Always show how the past did, not only what's expected next** (owner's rule, 2026-11-25). Every expectation the platform makes is frozen and later scored, and every screen, briefing and agent response that shows an expectation also shows how the corresponding past result landed against its frozen expectation: above, as expected or below (MODEL §4.1 thresholds).
+- **Posts:** each post's status against its frozen forecast (Posts, drawer, Overview, `get_posts`/`get_post`). Shipped in M1.
+- **Account:** the 7-day impressions and the median 48h impressions against the expected range combined from the posts' frozen draws, with an explicit outcome label; status counts for 7 and 28 days; an "Account" scorecard at the top of every briefing and in `get_account_overview`. Shipped in M1.
+- **Followers and goals (M3):** follower forecasts are frozen at each run (like post forecasts) and scored when their horizon passes, so the Account screen shows past follower growth against what was expected for that period, not just the forward band. Goal status keeps its history.
+- **Experiments (M2):** each readout shows the treated posts' outcomes against their frozen treatment-blind forecasts.
+
+---
+
 ## 7. Experiments (MODEL §6)
 
 Kept as MODEL §6 specifies: slots registered for whole local days up to 7 days ahead; treatment-blind forecast frozen before a seeded draw blocked within the day; matching by slot tag or nearest planned time within ±30 min; intention to treat; the analysis model and a 9,999-draw randomization test; the decision rule evaluated at the first run after each experiment-week boundary; at most one 50% extension; arm-harm and unfollow guardrails as confidence sequences; e-LOND at FDR 0.10, the only route to "confirmed"; the three-number power preview.

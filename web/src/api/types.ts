@@ -142,6 +142,11 @@ export interface components {
             q90: number;
             /** Percentile */
             percentile: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "above" | "as_expected" | "below";
             /** N Posts */
             n_posts: number;
             /** Method */

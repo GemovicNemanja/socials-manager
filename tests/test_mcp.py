@@ -75,6 +75,7 @@ def test_tool_list_is_exactly_the_m1_set_and_none_can_act_on_x(server: Any) -> N
 def test_get_briefing_and_run_status(server: Any) -> None:
     b = call(server, "get_briefing")
     assert b["run_id"] == 43 and "reached 48h" in b["summary"]
+    assert "Account: Impressions, last 7 days" in b["summary"] and b["data"]["account"]
     # 123 matured posts, but the M1 champion is prior-only: confidence must not claim more.
     assert b["data_sufficiency"]["owner_n"] > 60 and b["confidence"] == "too early"
     assert b["data_sufficiency"]["reason"] == "prior_only_uncalibrated"
@@ -158,6 +159,10 @@ def test_set_label_validates_and_records_owner_labels(server: Any, mcp_settings:
 def test_account_overview_and_export(server: Any) -> None:
     ov = call(server, "get_account_overview")
     assert "followers" in ov["summary"] and ov["overview"]["total_posts"] == 129
+    # Past results against expectations are always part of the account view, not only forecasts.
+    assert any("expected" in line and "Impressions, last 7 days" in line for line in ov["scorecard"])
+    tile = ov["overview"]["tiles"]["impressions_7d"]["expected"]
+    assert tile["outcome"] in ("above", "as_expected", "below")
     exported = call(server, "export_data", what="all", fmt="csv")
     assert len(exported["files"]) == 3
     assert all(Path(f).exists() and Path(f).stat().st_size > 0 for f in exported["files"])

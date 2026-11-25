@@ -57,6 +57,9 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
     previous = pipeline.last_finished_run(session, settings.workspace_id, before=run.cutoff_at)
     if previous is not None:
         caveats += (previous.steps or {}).get("backup", {}).get("result", {}).get("caveats", [])
+    from socialmgr.services.overview import account_scorecard, overview
+
+    account = account_scorecard(overview(session, settings, now=run.cutoff_at))
     upcoming = session.scalars(
         select(PlannedSlot)
         .where(PlannedSlot.workspace_id == settings.workspace_id, PlannedSlot.state == "planned")
@@ -70,6 +73,7 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
         "new_posts": collect.get("new_posts", 0),
         "scored": counts,
         "notable": notable,
+        "account": account,
         "late_maturity": result("score").get("late_maturity", 0),
         "regimes_opened": result("regimes").get("opened", []),
         "near_duplicates": result("label").get("near_duplicates", []),
@@ -93,6 +97,7 @@ def summarize(data: dict[str, Any]) -> str:
         f"{data['new_posts']} new posts; {n_scored} reached 48h: "
         f"{scored['above']} above range, {scored['as_expected']} as expected, {scored['below']} below."
     )
+    lines += [f"Account: {line}" for line in data.get("account", [])[:2]]
     for item in data["notable"][:5]:
         lines.append(
             f"- {item['post']} {LABEL_TEXT[item['label']]}: ~{item['outcome_i48']:,} impressions at 48h "

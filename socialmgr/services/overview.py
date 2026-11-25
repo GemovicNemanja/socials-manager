@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from socialmgr.core.config import Settings
 from socialmgr.db.models import Cost, FollowerSnapshot, Forecast, MetricSnapshot, Post, Run, ScoreRow
+from socialmgr.modelling import scoring
 from socialmgr.services import draws
 from socialmgr.services.pipeline import FORECAST_TYPES, last_finished_run, owner_account
 from socialmgr.services.read_models import (
@@ -43,6 +44,8 @@ class ExpectedRange(BaseModel):
     q50: float
     q90: float
     percentile: float  # mid-rank of the actual value in the predictive draws, 0..1
+    # Where the actual landed against the expectation (MODEL §4.1 thresholds: >= 0.8, <= 0.2).
+    outcome: scoring.SurpriseLabel
     n_posts: int
     method: str
 
@@ -169,6 +172,7 @@ def _expected(
         q50=round(float(q50), 1),
         q90=round(float(q90), 1),
         percentile=round(_mid_rank(joint, actual), 4),
+        outcome=scoring.surprise_label(_mid_rank(joint, actual)),
         n_posts=len(forecasts),
         method=f"{stat} of frozen predictive draws, posts treated as independent",
     )
@@ -402,3 +406,37 @@ def overview(session: Session, settings: Settings, now: datetime | None = None) 
         ),
         pending_areas=PENDING,
     )
+
+
+OUTCOME_TEXT = {"above": "above expected", "as_expected": "as expected", "below": "below expected"}
+
+
+def account_scorecard(ov: Overview) -> list[str]:
+    """How the account did against its expectations, in plain lines (past results, not forecasts)."""
+    lines = []
+    t = ov.tiles
+    for name, kpi, fmt in (
+        ("Impressions, last 7 days", t.impressions_7d, "{:,.0f}"),
+        ("Median 48h impressions, last 21 matured posts", t.median_i48, "{:,.0f}"),
+    ):
+        if kpi.value is None:
+            continue
+        if kpi.expected is None:
+            lines.append(f"{name}: {fmt.format(kpi.value)} (no expected range yet).")
+            continue
+        e = kpi.expected
+        lines.append(
+            f"{name}: {fmt.format(kpi.value)}, {OUTCOME_TEXT[e.outcome]} "
+            f"(expected {fmt.format(e.q10)}-{fmt.format(e.q90)}, median {fmt.format(e.q50)}; "
+            f"p{e.percentile * 100:.0f})."
+        )
+    s7, s28 = ov.status_7d, ov.status_28d
+    lines.append(
+        f"Posts that reached 48h: last 7 days {s7.above} above / {s7.as_expected} as expected / "
+        f"{s7.below} below; "
+        f"last 28 days {s28.above} / {s28.as_expected} / {s28.below}."
+    )
+    if t.followers.now is not None:
+        change = f", {t.followers.change_7d:+,} in 7 days" if t.followers.change_7d is not None else ""
+        lines.append(f"Followers: {t.followers.now:,}{change} (follower expectations arrive in M3).")
+    return lines

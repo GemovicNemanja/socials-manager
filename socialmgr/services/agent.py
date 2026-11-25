@@ -507,11 +507,13 @@ def set_label(session: Session, settings: Settings, post_id: str, field: str, va
 
 
 class OverviewResponse(AgentResponse):
+    scorecard: list[str]  # past results against expectations, account level
     overview: overview.Overview
 
 
 def get_account_overview(session: Session, settings: Settings) -> OverviewResponse:
     ov = overview.overview(session, settings)
+    scorecard = overview.account_scorecard(ov)
     t = ov.tiles
     parts = [f"{t.followers.now:,} followers" if t.followers.now is not None else "followers unknown"]
     if t.followers.change_7d is not None:
@@ -520,7 +522,10 @@ def get_account_overview(session: Session, settings: Settings) -> OverviewRespon
         f"{ov.status_7d.above} above / {ov.status_7d.as_expected} as expected / "
         f"{ov.status_7d.below} below range in 7 days"
     )
-    return OverviewResponse(**_envelope(session, settings, "; ".join(parts) + ".", ov.caveats), overview=ov)
+    summary = "; ".join(parts) + ".\n" + "\n".join(scorecard)
+    return OverviewResponse(
+        **_envelope(session, settings, summary, ov.caveats), overview=ov, scorecard=scorecard
+    )
 
 
 class ExportResponse(AgentResponse):

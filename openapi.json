@@ -305,6 +305,15 @@
             "type": "number",
             "title": "Percentile"
           },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "above",
+              "as_expected",
+              "below"
+            ],
+            "title": "Outcome"
+          },
           "n_posts": {
             "type": "integer",
             "title": "N Posts"
@@ -320,6 +329,7 @@
           "q50",
           "q90",
           "percentile",
+          "outcome",
           "n_posts",
           "method"
         ],
