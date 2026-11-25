@@ -92,6 +92,18 @@ def slot_outcomes(session: Session, exp: Experiment) -> list[SlotOutcome]:
     by_slot: dict[int, list[Assignment]] = {}
     for a in engine.assignments_of(session, exp):
         by_slot.setdefault(a.slot_id, []).append(a)
+    # Concurrent experiments randomized on the same slots (the factorial, plan §7): their arms enter
+    # the analysis as covariates (MODEL §6.2 sums over every factor on the post), so a chance overlap
+    # between two experiments' draws can't leak one's effect into the other's estimate.
+    others: dict[int, dict[str, int]] = {}
+    if by_slot:
+        rows_other = session.execute(
+            select(Assignment, Experiment.key)
+            .join(Experiment, Experiment.id == Assignment.experiment_id)
+            .where(Assignment.slot_id.in_(list(by_slot)), Assignment.experiment_id != exp.id)
+        ).all()
+        for a, key in rows_other:
+            others.setdefault(a.slot_id, {})[f"{key}:{a.factor}"] = a.arm
     out = []
     for slot_id, rows in by_slot.items():
         if slot_id in excluded:
@@ -109,7 +121,7 @@ def slot_outcomes(session: Session, exp: Experiment) -> list[SlotOutcome]:
         out.append(
             SlotOutcome(
                 slot=slot,
-                arms={a.factor: a.arm for a in rows},
+                arms={**others.get(slot_id, {}), **{a.factor: a.arm for a in rows}},
                 blocks={a.factor: a.block_key for a in rows},
                 measured=all(a.measured for a in rows),
                 y=y,
@@ -162,7 +174,7 @@ def switchback_observations(
         else:
             ly = sum(math.log1p(y) for y in ys) / len(ys)
             lf = sum(math.log1p(f) for f in fs) / len(fs)
-        factor = next(iter(group[0].arms))
+        factor = next(iter(group[0].blocks))  # its own factor (arms also carry covariates)
         blocks.setdefault(block, []).append((ly, lf, day, group[0].arms[factor], factor))
     out: dict[str, list[stats.Observation]] = {}
     for block, vals in sorted(blocks.items()):
@@ -463,7 +475,9 @@ def analyse(
                 "randomization_p": None,
             }
             continue
+        # Own factors plus concurrent experiments' factors present on every analysed post.
         in_model = [k for k in names if all(k in o.arms for o in rows)]
+        in_model += sorted({k for o in rows for k in o.arms if ":" in k and all(k in r.arms for r in rows)})
         post = stats.analyze(rows, in_model, seed=exp.seed)[factor]
         dec = stats.decide(post, at_horizon=at_horizon, delta=exp.delta)
         p = stats.randomization_test(rows, factor, seed=exp.seed)

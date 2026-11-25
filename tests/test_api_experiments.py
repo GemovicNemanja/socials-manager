@@ -72,10 +72,10 @@ def demo(tmp_path: Path, demo_db: Path) -> TestClient:
     return client(settings)
 
 
-def ok(response: Any) -> dict[str, Any]:
+def ok(response: Any) -> Any:
+    """The JSON body of a 200 response (an object, or a list for list routes)."""
     assert response.status_code == 200, response.text
-    body: dict[str, Any] = response.json()
-    return body
+    return response.json()
 
 
 def local_tomorrow(api: TestClient, k: int = 1) -> date:
@@ -88,7 +88,8 @@ def day(d: date, *times: str, **labels: str) -> dict[str, Any]:
 
 
 def propose(api: TestClient, **body: Any) -> dict[str, Any]:
-    return ok(api.post("/api/experiments", json=body))
+    result: dict[str, Any] = ok(api.post("/api/experiments", json=body))
+    return result
 
 
 # ---------------------------------------------------------------- reads
@@ -309,3 +310,26 @@ def test_suggestion_arms_all_have_plain_instructions() -> None:
         "Post at 2026-11-26 07:00 (UTC), within 30 minutes: "
         "put the link in the first self-reply, not in the post."
     )
+
+
+def test_concurrent_experiments_enter_each_others_analysis_as_covariates(
+    tmp_path: Path, demo_db: Path
+) -> None:
+    """MODEL §6.2 sums over every factor on a post: E03's analysis controls for E06's arm and vice versa."""
+    from socialmgr.db.session import make_engine as _make_engine
+    from socialmgr.experiments import engine as exp_engine
+    from socialmgr.experiments import monitor
+
+    settings = offline(tmp_path)
+    shutil.copy(demo_db, settings.db_path)
+    with session_factory(_make_engine(settings))() as session:
+        e03 = exp_engine.get_experiment(session, settings, "E03")
+        e06 = exp_engine.get_experiment(session, settings, "E06")
+        obs03 = monitor.observations(session, settings, e03)
+        obs06 = monitor.observations(session, settings, e06)
+        f03, f06 = next(iter(obs03)), next(iter(obs06))
+        assert all(f"E06:{f06}" in o.arms for o in obs03[f03])
+        assert all(f"E03:{f03}" in o.arms for o in obs06[f06])
+        # The covariate is the other experiment's original assignment on that slot.
+        by_slot = {o.slot_key: o.arms[f06] for o in obs06[f06]}
+        assert all(o.arms[f"E06:{f06}"] == by_slot[o.slot_key] for o in obs03[f03] if o.slot_key in by_slot)
