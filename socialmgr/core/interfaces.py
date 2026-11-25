@@ -12,6 +12,8 @@ from socialmgr.core.types import (
     CollectionBatch,
     CollectionRequest,
     ForecastSubject,
+    LabelInput,
+    LabelResult,
     PredictiveDraws,
     PriorContext,
     PriorSpec,
@@ -56,3 +58,17 @@ class ForecastModel(Protocol):
     version: str
 
     def fit(self, examples: Sequence[TrainingExample], prior: PriorSpec, seed: int) -> FittedModel: ...
+
+
+@runtime_checkable
+class Labeler(Protocol):
+    """Assigns LLM labels (topic, content kind, hook) from a versioned label set.
+
+    v1: headless Claude Code on the member's subscription (default) or the Anthropic API.
+    A failure returns no labels for the affected posts; the run continues and says so.
+    """
+
+    name: str
+    version: str
+
+    def label(self, items: Sequence[LabelInput]) -> list[LabelResult]: ...

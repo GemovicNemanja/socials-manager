@@ -123,6 +123,13 @@ class Post(WorkspaceMixin, Base):
     followers_at_post: Mapped[int | None] = mapped_column(Integer)
     first_seen_run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
     deleted_at: Mapped[datetime | None]
+    # Text and cadence features known before posting (MODEL §1.4), filled by the label step.
+    minhash: Mapped[bytes | None] = mapped_column(LargeBinary)
+    text_len_weighted: Mapped[int | None] = mapped_column(Integer)
+    newlines: Mapped[int | None] = mapped_column(Integer)
+    gap_since_prev_min: Mapped[float | None] = mapped_column(Float)
+    own_posts_48h: Mapped[int | None] = mapped_column(Integer)
+    slot_id: Mapped[int | None] = mapped_column(ForeignKey("planned_slots.id", name="fk_posts_slot_id"))
 
 
 class MetricSnapshot(WorkspaceMixin, Base):
@@ -251,3 +258,103 @@ class Cost(WorkspaceMixin, Base):
     amount_usd: Mapped[float] = mapped_column(Float)
     simulated: Mapped[bool] = mapped_column(Boolean, default=False)
     incurred_at: Mapped[datetime]
+
+
+class PlannedSlot(WorkspaceMixin, Base):
+    """A post registered before it's published; its live forecast is frozen at registration."""
+
+    __tablename__ = "planned_slots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    planned_at: Mapped[datetime]
+    text: Mapped[str | None] = mapped_column(Text)
+    text_hash: Mapped[str | None] = mapped_column(String(64))
+    minhash: Mapped[bytes | None] = mapped_column(LargeBinary)
+    post_type: Mapped[str] = mapped_column(String(16), default="original")
+    labels: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    lever_context: Mapped[dict[str, Any] | None]
+    experiment_id: Mapped[int | None] = mapped_column(Integer)
+    arm: Mapped[str | None] = mapped_column(String(32))
+    matched_post_id: Mapped[int | None] = mapped_column(ForeignKey("posts.id"))
+    state: Mapped[str] = mapped_column(String(16))  # planned | posted | missed | cancelled
+    registered_by: Mapped[str] = mapped_column(String(16))  # cli | agent | web
+    created_at: Mapped[datetime]
+
+
+class Regime(WorkspaceMixin, Base):
+    """Ranker regimes (MODEL §2e): seeded dates plus changes found in ``param.rs``."""
+
+    __tablename__ = "regimes"
+    __table_args__ = (UniqueConstraint("workspace_id", "platform", "started_at", "kind"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    platform: Mapped[str] = mapped_column(String(32))
+    started_at: Mapped[datetime]
+    kind: Mapped[str] = mapped_column(String(16))  # weight | cold_start | source | model | safety | unknown
+    source: Mapped[str] = mapped_column(String(16))  # seed | param_rs
+    confidence: Mapped[str] = mapped_column(String(8))  # high | low
+    ref: Mapped[str | None] = mapped_column(String(64))  # commit sha
+    description: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime]
+
+
+class TrackerState(WorkspaceMixin, Base):
+    """Last seen version of each external file the run tracks (``param.rs``)."""
+
+    __tablename__ = "tracker_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    ref: Mapped[str] = mapped_column(String(64))
+    checked_at: Mapped[datetime]
+
+
+class MaturityCurve(WorkspaceMixin, Base):
+    """A fitted maturity curve; forecasts name the version they used (MODEL §1.3)."""
+
+    __tablename__ = "maturity_curves"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version: Mapped[str] = mapped_column(String(64), unique=True)
+    family: Mapped[str] = mapped_column(String(32))
+    params: Mapped[dict[str, Any]]
+    n_pairs: Mapped[int] = mapped_column(Integer)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
+    fitted_at: Mapped[datetime]
+
+
+class ResourceRead(WorkspaceMixin, Base):
+    """One billable resource per provider per UTC day: re-reads that day aren't billed again."""
+
+    __tablename__ = "resource_reads"
+    __table_args__ = (UniqueConstraint("provider", "resource", "utc_day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    provider: Mapped[str] = mapped_column(String(64))
+    resource: Mapped[str] = mapped_column(String(128))
+    utc_day: Mapped[str] = mapped_column(String(10))
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
+
+
+class Briefing(WorkspaceMixin, Base):
+    __tablename__ = "briefings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"), unique=True)
+    created_at: Mapped[datetime]
+    summary: Mapped[str] = mapped_column(Text)
+    data: Mapped[dict[str, Any]]
+
+
+class FollowerId(WorkspaceMixin, Base):
+    """Followers seen so far, so a run pages the newest-first list only until a known one (§5)."""
+
+    __tablename__ = "follower_ids"
+    __table_args__ = (UniqueConstraint("account_id", "external_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    external_id: Mapped[str] = mapped_column(String(64))
+    first_seen_run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id"))
+    first_seen_at: Mapped[datetime]

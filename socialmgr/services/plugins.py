@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from socialmgr import plugins
 from socialmgr.core.config import Settings
-from socialmgr.core.interfaces import DataProvider, ForecastModel, PriorSource
+from socialmgr.core.interfaces import DataProvider, ForecastModel, Labeler, PriorSource
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,7 @@ class ActivePlugins:
     prior_source: PriorSource
     champion: ForecastModel
     challengers: tuple[ForecastModel, ...]
+    labeler: Labeler
 
 
 def load_plugins(settings: Settings) -> ActivePlugins:
@@ -22,4 +23,5 @@ def load_plugins(settings: Settings) -> ActivePlugins:
         prior_source=plugins.prior_sources.resolve(cfg.prior_source, settings),
         champion=plugins.models.resolve(cfg.champion_model, settings),
         challengers=tuple(plugins.models.resolve(name, settings) for name in cfg.challenger_models),
+        labeler=plugins.labelers.resolve(cfg.labeler, settings),
     )

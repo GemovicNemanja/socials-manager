@@ -36,6 +36,9 @@ class AccountRef(Frozen):
     handle: str
     role: AccountRole
     external_id: str | None = None
+    # Recently seen follower ids. A provider with FOLLOWER_LISTS pages the newest-first follower
+    # list only until one of these appears; empty means "no baseline yet".
+    known_follower_ids: tuple[str, ...] = ()
 
 
 class FetchedAccount(Frozen):
@@ -44,6 +47,11 @@ class FetchedAccount(Frozen):
     handle: str
     followers: int
     fetched_at: datetime
+    # Followers newer than the newest known one, newest first. None when not collected or incomplete
+    # (e.g. rate limited). With no known_follower_ids on the request this is a baseline sample, not
+    # "new" followers.
+    new_follower_ids: tuple[str, ...] | None = None
+    new_followers_complete: bool = True  # false: ids recorded as a baseline, count not trusted
 
 
 class FetchedPost(Frozen):
@@ -80,12 +88,21 @@ class CollectionRequest(Frozen):
     until: datetime
 
 
+class BillableRead(Frozen):
+    resource: str  # e.g. "post:<id>", "user:<id>", "follower:<id>"
+    unit_cost_usd: float
+
+
 class CollectionBatch(Frozen):
     provider: str
     accounts: tuple[FetchedAccount, ...] = ()
     posts: tuple[FetchedPost, ...] = ()
     metrics: tuple[FetchedMetrics, ...] = ()
-    cost_usd: float = 0.0
+    cost_usd: float = 0.0  # used when the provider doesn't list billable reads
+    # Billable resources read. When given, the collector bills each once per provider per UTC day,
+    # matching X's deduplication of Owned Reads, so a resumed or repeated run isn't billed twice.
+    billable: tuple["BillableRead", ...] = ()
+    caveats: tuple[str, ...] = ()
 
 
 class Distribution(Frozen):
@@ -141,3 +158,18 @@ class PredictiveDraws:
 
     def quantile(self, q: float) -> float:
         return float(np.quantile(self.samples, q))
+
+
+class LabelInput(Frozen):
+    """One post (or planned draft) to label. ``key`` is echoed back so results can be matched."""
+
+    key: str
+    text: str
+    post_type: PostType = "original"
+    format: str | None = None
+
+
+class LabelResult(Frozen):
+    key: str
+    values: dict[str, str]  # field -> value, only fields in the label set
+    confidence: float | None = None

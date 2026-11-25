@@ -71,6 +71,51 @@ export function formatDateTime(iso: string, tz: string): string {
   }
 }
 
+const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
+/** 21805 -> "21.8k"; under 10k stays a full integer, "3,904". */
+export function formatCompact(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return EMPTY;
+  return Math.abs(value) < 10_000 ? formatInt(value) : compact.format(value).toLowerCase();
+}
+
+/** 67 -> "+67", -3 -> "−3", 0 -> "±0" */
+export function formatSigned(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return EMPTY;
+  if (value === 0) return "±0";
+  return `${value > 0 ? "+" : "−"}${formatInt(Math.abs(value))}`;
+}
+
+/** 0.1658 -> "16.6%"; digits sets the decimals. */
+export function formatPercent(value: number | null | undefined, digits = 1): string {
+  if (value == null || !Number.isFinite(value)) return EMPTY;
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+/** A 0..1 mid-rank as a percentile label: 0.813 -> "p81". */
+export function formatPercentile(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return EMPTY;
+  return `p${Math.min(99, Math.max(1, Math.round(value * 100)))}`;
+}
+
+/** Change against a previous value as a signed percentage: "+26%". */
+export function formatChange(value: number | null | undefined, previous: number | null | undefined): string {
+  if (value == null || previous == null || !previous) return EMPTY;
+  const pct = Math.round(((value - previous) / previous) * 100);
+  return `${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct)}%`;
+}
+
+/** "Nov 25" in the account's zone. */
+export function formatDay(iso: string, tz: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return EMPTY;
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric" }).format(date);
+  } catch {
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+}
+
 /** "narrated_video" -> "Narrated video"; display strings pass through. */
 export function formatLabel(value: string | null | undefined): string {
   if (!value) return EMPTY;

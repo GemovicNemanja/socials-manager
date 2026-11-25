@@ -1,8 +1,10 @@
 """Built-in implementations of the extension interfaces, registered by name."""
 
 from socialmgr.core.config import Settings
-from socialmgr.core.interfaces import DataProvider, ForecastModel, PriorSource
+from socialmgr.core.interfaces import DataProvider, ForecastModel, Labeler, PriorSource
 from socialmgr.core.registry import Registry
+from socialmgr.labelling.llm import AnthropicApiLabeler, ClaudeCodeLabeler, NoLabeler
+from socialmgr.modelling.models.nb2 import NB2PriorModel
 from socialmgr.modelling.models.trailing_median import TrailingMedianModel
 from socialmgr.modelling.priors.hand_set import HandSetPrior
 from socialmgr.providers.fake import FakeOwnerProvider, FakePublicProvider
@@ -10,6 +12,7 @@ from socialmgr.providers.fake import FakeOwnerProvider, FakePublicProvider
 providers: Registry[DataProvider] = Registry("provider")
 prior_sources: Registry[PriorSource] = Registry("prior source")
 models: Registry[ForecastModel] = Registry("model")
+labelers: Registry[Labeler] = Registry("labeler")
 
 
 @providers.register("fake_owner")
@@ -22,6 +25,14 @@ def _fake_public(settings: Settings) -> DataProvider:
     return FakePublicProvider()
 
 
+@providers.register("x")
+def _x(settings: Settings) -> DataProvider:
+    # Imported here so loading the registry doesn't build an HTTP client or touch credentials.
+    from socialmgr.providers.x.provider import XOwnerProvider
+
+    return XOwnerProvider(settings)
+
+
 @prior_sources.register("hand_set")
 def _hand_set(settings: Settings) -> PriorSource:
     return HandSetPrior()
@@ -30,3 +41,24 @@ def _hand_set(settings: Settings) -> PriorSource:
 @models.register("trailing_median")
 def _trailing_median(settings: Settings) -> ForecastModel:
     return TrailingMedianModel()
+
+
+@models.register("nb2")
+def _nb2(settings: Settings) -> ForecastModel:
+    return NB2PriorModel()
+
+
+@labelers.register("claude_code")
+def _claude_code(settings: Settings) -> Labeler:
+    return ClaudeCodeLabeler()
+
+
+@labelers.register("anthropic_api")
+def _anthropic_api(settings: Settings) -> Labeler:
+    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
+    return AnthropicApiLabeler(api_key=key)
+
+
+@labelers.register("none")
+def _no_labeler(settings: Settings) -> Labeler:
+    return NoLabeler()

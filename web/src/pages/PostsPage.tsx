@@ -1,25 +1,18 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePosts, useShell } from "../api/hooks";
 import type { PostItem, PostsStatusFilter } from "../api/models";
 import { Button } from "../components/Button";
 import { ColumnHeader } from "../components/ColumnHeader";
 import { FilterChip } from "../components/FilterChip";
 import { icons } from "../components/icons";
-import { PostRow } from "../components/PostRow";
-import { RangeStrip } from "../components/RangeStrip";
+import { PostTableRow } from "../components/PostTableRow";
 import { SearchField } from "../components/SearchField";
-import { StatusPill } from "../components/StatusPill";
 import { cx } from "../lib/cx";
 import { downloadText, postsToCsv } from "../lib/csv";
-import {
-  formatAge,
-  formatDateTime,
-  formatDecimal,
-  formatI48,
-  formatInt,
-  formatLabel,
-} from "../lib/format";
-import { POST_STATUS, STATUS_FILTERS, rangeReading } from "../lib/status";
+import { formatDateTime, formatInt } from "../lib/format";
+import { navigate, useRouteSub } from "../lib/router";
+import { STATUS_FILTERS } from "../lib/status";
+import { PostDrawer } from "./PostDrawer";
 
 const LATER = "Arrives in M1";
 const FilterIcon = icons.ActionFilter;
@@ -49,6 +42,9 @@ export function PostsPage() {
 
   const shell = useShell();
   const posts = usePosts(status);
+  const selected = useRouteSub();
+  const selectedId = selected ? `post:${selected.replace(/^post:/, "")}` : null;
+  const closeDrawer = useCallback(() => navigate("posts"), []);
 
   const tz = shell.data?.account?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const firstPage = posts.data?.pages[0];
@@ -119,93 +115,74 @@ export function PostsPage() {
         <span className="font-mono text-[11px] leading-normal whitespace-nowrap text-faint">{resultCount}</span>
       </div>
 
-      {/* Posts table */}
-      <div role="table" aria-label="Posts" className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div role="row" className="flex h-7 shrink-0 items-center border-b border-rule bg-raised px-4">
-          <div className="flex min-w-0 flex-1 items-center">
-            <ColumnHeader label="Post" className="min-w-0 flex-1" />
-            <ColumnHeader label="Format" className="w-[88px]" />
-            <ColumnHeader label="Topic" className="w-20" />
-            <ColumnHeader label="Age" align="right" className="w-12" />
-            <ColumnHeader label="48h est." align="right" className="w-14" />
-            <ColumnHeader label="Likes/1k" align="right" className="w-[60px]" />
+      <div className="flex min-h-0 min-w-0 flex-1">
+        {/* Posts table */}
+        <div role="table" aria-label="Posts" className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div role="row" className="flex h-7 shrink-0 items-center border-b border-rule bg-raised px-4">
+            <div className="flex min-w-0 flex-1 items-center">
+              <ColumnHeader label="Post" className="min-w-0 flex-1" />
+              <ColumnHeader label="Format" className="w-[88px]" />
+              <ColumnHeader label="Topic" className="w-20" />
+              <ColumnHeader label="Age" align="right" className="w-12" />
+              <ColumnHeader label="48h est." align="right" className="w-14" />
+              <ColumnHeader label="Likes/1k" align="right" className="w-[60px]" />
+            </div>
+            <ColumnHeader label="vs expected" className="w-[92px] pl-4" />
+            <ColumnHeader label="Status" className="w-[92px]" />
           </div>
-          <ColumnHeader label="vs expected" className="w-[92px] pl-4" />
-          <ColumnHeader label="Status" className="w-[92px]" />
-        </div>
 
-        <div role="rowgroup" className={cx("min-h-0 flex-1 overflow-y-auto", posts.isPlaceholderData && "opacity-60")}>
-          {posts.isPending ? (
-            <TableMessage>Loading posts…</TableMessage>
-          ) : posts.isError ? (
-            <TableMessage
-              action={<Button label="Retry" showIcon={false} onClick={() => void posts.refetch()} />}
-            >
-              Can’t reach the API ({posts.error.message}). Is <code className="font-mono text-muted">socialmgr serve</code>{" "}
-              running?
-            </TableMessage>
-          ) : visible.length === 0 ? (
-            <TableMessage>
-              {search.trim()
-                ? "No loaded posts match the filter."
-                : status === "all"
-                  ? "No posts yet. Run socialmgr run to collect them."
-                  : `No posts with status ${STATUS_FILTERS.find((s) => s.value === status)?.label ?? status}.`}
-            </TableMessage>
-          ) : (
-            <>
-              {visible.map((post) => (
-                <PostTableRow key={post.id} post={post} tz={tz} />
-              ))}
-              {posts.hasNextPage && (
-                <div className="flex h-[34px] items-center justify-center border-b border-grid">
-                  <Button
-                    variant="ghost"
-                    showIcon={false}
-                    label={posts.isFetchingNextPage ? "Loading…" : `Load ${formatInt(Math.min(50, (total ?? 0) - loaded.length))} more`}
-                    disabled={posts.isFetchingNextPage}
-                    onClick={() => void posts.fetchNextPage()}
+          <div role="rowgroup" className={cx("min-h-0 flex-1 overflow-y-auto", posts.isPlaceholderData && "opacity-60")}>
+            {posts.isPending ? (
+              <TableMessage>Loading posts…</TableMessage>
+            ) : posts.isError ? (
+              <TableMessage
+                action={<Button label="Retry" showIcon={false} onClick={() => void posts.refetch()} />}
+              >
+                Can’t reach the API ({posts.error.message}). Is <code className="font-mono text-muted">socialmgr serve</code>{" "}
+                running?
+              </TableMessage>
+            ) : visible.length === 0 ? (
+              <TableMessage>
+                {search.trim()
+                  ? "No loaded posts match the filter."
+                  : status === "all"
+                    ? "No posts yet. Run socialmgr run to collect them."
+                    : `No posts with status ${STATUS_FILTERS.find((s) => s.value === status)?.label ?? status}.`}
+              </TableMessage>
+            ) : (
+              <>
+                {visible.map((post) => (
+                  <PostTableRow
+                    key={post.id}
+                    post={post}
+                    tz={tz}
+                    selected={post.id === selectedId}
+                    onSelect={(p) => navigate("posts", p.id.replace(/^post:/, ""))}
                   />
-                </div>
-              )}
-              {caveats.length > 0 && (
-                <ul className="flex flex-col gap-0.5 px-4 py-3 text-[11px] leading-normal text-faint">
-                  {caveats.map((c) => (
-                    <li key={c}>{c}</li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
+                ))}
+                {posts.hasNextPage && (
+                  <div className="flex h-[34px] items-center justify-center border-b border-grid">
+                    <Button
+                      variant="ghost"
+                      showIcon={false}
+                      label={posts.isFetchingNextPage ? "Loading…" : `Load ${formatInt(Math.min(50, (total ?? 0) - loaded.length))} more`}
+                      disabled={posts.isFetchingNextPage}
+                      onClick={() => void posts.fetchNextPage()}
+                    />
+                  </div>
+                )}
+                {caveats.length > 0 && (
+                  <ul className="flex flex-col gap-0.5 px-4 py-3 text-[11px] leading-normal text-faint">
+                    {caveats.map((c) => (
+                      <li key={c}>{c}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function PostTableRow({ post, tz }: { post: PostItem; tz: string }) {
-  const status = POST_STATUS[post.status];
-  const reading = rangeReading(post);
-  return (
-    <div
-      role="row"
-      title={`${post.id} · ${formatDateTime(post.created_at, tz)}`}
-      className="flex h-[34px] items-center border-b border-grid px-4 hover:bg-raised"
-    >
-      <PostRow
-        text={post.text}
-        format={formatLabel(post.format)}
-        topic={formatLabel(post.topic)}
-        early={formatAge(post.age_h)}
-        mature={formatI48(post.i48)}
-        rate={formatDecimal(post.likes_per_1k)}
-        className="min-w-0 flex-1"
-      />
-      <div role="cell" className="flex w-[92px] shrink-0 items-center pr-2 pl-4">
-        {reading && <RangeStrip reading={reading} className="w-full" />}
-      </div>
-      <div role="cell" className="flex w-[92px] shrink-0 items-center">
-        <StatusPill label={status.label} status={status.pill} />
+        {selected && <PostDrawer key={selected} postId={selected} tz={tz} onClose={closeDrawer} />}
       </div>
     </div>
   );

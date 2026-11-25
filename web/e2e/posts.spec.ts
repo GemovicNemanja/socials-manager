@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // Fixture: 43 daily runs to 2026-11-25 06:00 UTC -> 129 posts (123 matured, 6 provisional).
+// Status counts depend on the model, so tests read them from the API instead of hard-coding them.
 const TOTAL = 129;
 
 test.describe("Posts screen against the real backend", () => {
@@ -29,13 +30,16 @@ test.describe("Posts screen against the real backend", () => {
     await expect(rows.first().getByText(/^≈/)).toBeVisible();
   });
 
-  test("status filter narrows the table through the API", async ({ page }) => {
+  test("status filter narrows the table through the API", async ({ page, request }) => {
+    const counts = (await (await request.get("/api/posts?limit=1")).json()).counts_by_status;
+    const above: number = counts.above;
+    expect(above).toBeGreaterThan(0);
     await page.goto("/#/posts");
     await page.getByRole("button", { name: /Status/ }).click();
     await page.getByRole("listbox", { name: "Status" }).getByText("Above", { exact: true }).click();
-    await expect(page.getByText("23 posts · newest first")).toBeVisible();
+    await expect(page.getByText(`${above} posts · newest first`)).toBeVisible();
     const pills = page.getByRole("rowgroup").getByRole("row");
-    await expect(pills).toHaveCount(23);
+    await expect(pills).toHaveCount(Math.min(above, 50)); // the rest load on demand
     for (const label of ["As expected", "Below", "Provisional"]) {
       await expect(page.getByRole("rowgroup").getByText(label, { exact: true })).toHaveCount(0);
     }

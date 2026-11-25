@@ -19,6 +19,36 @@ def backup(settings: Settings, now: datetime | None = None) -> Path:
     return target
 
 
+def prune(settings: Settings) -> list[Path]:
+    """Keep the newest backup of each of the last ``backup_keep_daily`` days and of each of the last
+    ``backup_keep_weekly`` ISO weeks before that; delete the rest. Returns the deleted files."""
+    files = sorted(settings.resolved_backup_dir.glob("socialmgr-*.sqlite3"), reverse=True)
+    keep: set[Path] = set()
+    days: list[str] = []
+    weeks: list[str] = []
+    for f in files:  # newest first
+        try:
+            stamp = datetime.strptime(f.stem.removeprefix("socialmgr-"), "%Y%m%dT%H%M%SZ")
+        except ValueError:
+            keep.add(f)  # not ours: leave it alone
+            continue
+        day = stamp.strftime("%Y-%m-%d")
+        iso = stamp.isocalendar()
+        week = f"{iso.year}-W{iso.week:02d}"
+        if day in days or week in weeks:
+            continue
+        if len(days) < settings.run.backup_keep_daily:
+            days.append(day)
+            keep.add(f)
+        elif len(weeks) < settings.run.backup_keep_weekly:
+            weeks.append(week)
+            keep.add(f)
+    deleted = [f for f in files if f not in keep]
+    for f in deleted:
+        f.unlink()
+    return deleted
+
+
 def restore(settings: Settings, source: Path) -> None:
     """Replace the live database with ``source`` after an integrity check."""
     _check(source)

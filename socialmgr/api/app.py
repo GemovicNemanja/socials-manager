@@ -1,25 +1,58 @@
 """One process serves the REST API and the built web app (IMPLEMENTATION_PLAN.md §3)."""
 
+import threading
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from socialmgr import __version__
+from socialmgr.api import schemas
 from socialmgr.core.config import Settings
 from socialmgr.db.session import make_engine, session_factory
-from socialmgr.services import read_models
+from socialmgr.modelling.regimes import Fetcher, github_fetcher
+from socialmgr.services import agent, post_detail, read_models
+from socialmgr.services import overview as overview_model
+from socialmgr.services.plugins import ActivePlugins, load_plugins
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
 
-def create_app(settings: Settings | None = None, web_dist: Path | None = WEB_DIST) -> FastAPI:
+class _RunTracker:
+    """Counts runs this process is executing, so status can tell a live run from an interrupted one."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._n = 0
+
+    def __enter__(self) -> None:
+        with self._lock:
+            self._n += 1
+
+    def __exit__(self, *_: object) -> None:
+        with self._lock:
+            self._n -= 1
+
+    @property
+    def active(self) -> bool:
+        return self._n > 0
+
+
+def create_app(
+    settings: Settings | None = None,
+    web_dist: Path | None = WEB_DIST,
+    plugins: ActivePlugins | None = None,
+    regime_fetcher: Fetcher | Literal["default"] | None = "default",
+) -> FastAPI:
     settings = settings or Settings()
     factory = session_factory(make_engine(settings))
+    loaded: list[ActivePlugins] = [plugins] if plugins is not None else []
+    plugins_lock = threading.Lock()
+    tracker = _RunTracker()
     app = FastAPI(
         title="Social Manager", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json"
     )
@@ -29,6 +62,18 @@ def create_app(settings: Settings | None = None, web_dist: Path | None = WEB_DIS
             yield session
 
     SessionDep = Annotated[Session, Depends(get_session)]
+
+    def active_plugins() -> ActivePlugins:
+        """Loaded on first use, so serving reads and writing the schema never build providers."""
+        with plugins_lock:
+            if not loaded:
+                loaded.append(load_plugins(settings))
+            return loaded[0]
+
+    def fetcher() -> Fetcher | None:
+        if regime_fetcher == "default":
+            return github_fetcher() if settings.run.regime_check else None
+        return regime_fetcher
 
     @app.get("/api/health", tags=["meta"])
     def health() -> dict[str, str]:
@@ -46,6 +91,71 @@ def create_app(settings: Settings | None = None, web_dist: Path | None = WEB_DIS
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> read_models.PostsPage:
         return read_models.list_posts(session, settings, status=status, limit=limit, offset=offset)
+
+    @app.get("/api/posts/{post_id}", tags=["posts"], responses={404: {"description": "No such post"}})
+    def post(session: SessionDep, post_id: str) -> post_detail.PostDetail:
+        """One post: labels, frozen forecast, score and captures. Accepts `post:12` or `12`."""
+        raw = post_id.removeprefix("post:")
+        detail = post_detail.post_detail(session, settings, int(raw)) if raw.isdigit() else None
+        if detail is None:
+            raise HTTPException(status_code=404, detail=f"post {post_id} not found")
+        return detail
+
+    @app.get("/api/overview", tags=["overview"])
+    def overview(session: SessionDep) -> overview_model.Overview:
+        return overview_model.overview(session, settings)
+
+    @app.get("/api/briefing", tags=["runs"])
+    def briefing(session: SessionDep) -> schemas.BriefingOut:
+        """The latest run's briefing: summary lines, notable posts with record ids, caveats, spend."""
+        return schemas.briefing_out(agent.get_briefing(session, settings))
+
+    @app.get("/api/runs/status", tags=["runs"])
+    def run_status(session: SessionDep) -> schemas.RunStatusOut:
+        """The latest run and any unfinished run, step by step, with a classified failure if any."""
+        return schemas.run_status_out(session, agent.get_run_status(session, settings), tracker.active)
+
+    @app.post("/api/runs", tags=["runs"])
+    def start_run(session: SessionDep) -> schemas.RunStartOut:
+        """Run now, or resume an interrupted run, and return the new briefing.
+
+        Blocks until the run ends (seconds to a minute). It runs in the server's thread pool, so it
+        finishes even if the browser goes away; poll ``GET /api/runs/status`` meanwhile. If another
+        run holds the lock, returns at once and the status shows that run.
+        """
+        with tracker:
+            result = agent.start_run(session, settings, active_plugins(), fetcher())
+        status = agent.get_run_status(session, settings)
+        return schemas.RunStartOut(
+            briefing=schemas.briefing_out(result),
+            status=schemas.run_status_out(session, status, tracker.active),
+        )
+
+    @app.get("/api/planned", tags=["planned"])
+    def schedule(
+        session: SessionDep, include_past_days: Annotated[int, Query(ge=0, le=90)] = 7
+    ) -> agent.ScheduleResponse:
+        """Planned posts: upcoming ones with their frozen ranges, and recent ones (posted or missed)."""
+        return agent.get_schedule(session, settings, include_past_days=include_past_days)
+
+    @app.post(
+        "/api/planned/draft",
+        tags=["planned"],
+        responses={409: {"description": "No owner account yet: run once first"}},
+    )
+    def draft(session: SessionDep, body: schemas.PlanIn) -> agent.ForecastResponse:
+        """The forecast a planned post would get, with guardrail warnings. Freezes nothing."""
+        try:
+            return agent.get_forecast(session, settings, active_plugins(), draft=body.to_request())
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/planned", tags=["planned"])
+    def register(session: SessionDep, body: schemas.RegisterIn) -> agent.PlannedResponse:
+        """Register a planned post and freeze its forecast now, before the post exists."""
+        return agent.register_planned_post(
+            session, settings, active_plugins(), body.to_request(), body.accept_warnings
+        )
 
     if web_dist is not None and (web_dist / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")

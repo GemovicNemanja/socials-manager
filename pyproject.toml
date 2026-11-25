@@ -7,10 +7,13 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "alembic>=1.14",
     "fastapi>=0.115",
+    "httpx>=0.28.1",
+    "mcp>=2.3.0",
     "numpy>=2.1",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "pyyaml>=6.0",
+    "scipy>=1.18.1",
     "sqlalchemy>=2.0.36",
     "typer>=0.15",
     "uvicorn>=0.32",
@@ -19,12 +22,17 @@ dependencies = [
 [project.scripts]
 socialmgr = "socialmgr.cli:app"
 
+[project.optional-dependencies]
+api = [
+    "anthropic>=2.14.0",
+]
+
 [dependency-groups]
 dev = [
-    "httpx>=0.28",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",
+    "scipy-stubs>=1.18.1.1",
     "types-pyyaml>=6.0",
 ]
 
@@ -53,7 +61,7 @@ plugins = ["pydantic.mypy"]
 files = ["socialmgr"]
 
 [[tool.mypy.overrides]]
-module = ["alembic.*"]
+module = ["alembic.*", "anthropic", "anthropic.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
