@@ -6,7 +6,8 @@ The maths lives in [`docs/MODEL.md`](docs/MODEL.md) (Model v2) and governs all s
 
 **Revision 5: simple and quick to build.** The tool is for the owner and their team for now. Each person runs their own copy on their own machine, for their own X account. Anything that only made sense for a hosted, multi-user or public product is removed:
 - **removed:** peers and twitterapi.io, hosting (old M7), the public journal (old M6), insights, the Patterns, Collection, Agents and Insights screens, approval codes and assurance levels, MCP client tokens and parity tests, receipt anchors, the budget reservation and job machinery, reminders and notifications, Docker and PostgreSQL, the OS keychain;
-- **kept:** MODEL.md's statistics in full (forecasts, maturity curve, scoring, goal status, detectors, follower model, experiments with e-LOND), batch runs, frozen forecasts, MCP agent access and experiments.
+- **kept:** MODEL.md's statistics in full (forecasts, maturity curve, scoring, goal status, detectors, follower model, experiments with e-LOND), batch runs, frozen forecasts, MCP agent access and experiments;
+- **built to extend (§13):** peers, other models, a self-adapting model, other platforms and hosting are later additions behind interfaces that exist from M0, not rework.
 
 ---
 
@@ -31,7 +32,7 @@ Between runs, the agent can still start the MCP server (stdio) to read data, reg
 3. **Experiments.** Randomized per-post and switchback experiments with honest readouts (MODEL §6).
 4. **Agent access.** An MCP server so an agent (Claude Code, Codex, any MCP client) can read everything and drive runs, planned posts and experiments.
 
-**Out of scope for v1:** peers and competitor tracking, posting or engaging on X, LinkedIn and Instagram, hosting, shared team dashboards, the public journal, an insight library.
+**Out of scope for v1** (each lands later as an addition, §13): peers and competitor tracking, posting or engaging on X, LinkedIn and Instagram, hosting, shared team dashboards, the public journal, an insight library.
 
 ### Screens (canvas: Designs page)
 
@@ -89,12 +90,14 @@ React components mirror the Platform Components board one to one, but only those
 
 ```
 socialmgr/
-  core/          # domain types, config (Pydantic), XClient interface
-  x_api/         # official X API client + fake client for tests
-  runs/          # orchestrator, collector, capture ages, cost tally, deletions, backups
+  core/          # domain types, config (Pydantic), the extension interfaces in §13
+  platforms/     # platform profiles (YAML, MODEL §1.6): x.yaml in v1
+  providers/     # DataProvider adapters: x_official/ and fake/ in v1
+  runs/          # orchestrator and its step registry, collector, capture ages, cost tally, deletions, backups
   labelling/     # rules, Haiku labeller, label-set versions, MinHash
-  modelling/     # features, maturity_curve, nb2, nowcast, followers, detectors, evaluation, regimes
-  experiments/   # slots, protocol, randomization, readout, power, e-LOND, guardrails
+  modelling/     # features (versioned), priors/, models/ (nb2, baselines), maturity_curve, nowcast, followers, detectors, evaluation, registry, regimes
+  experiments/   # slots, designs/, randomization and allocation policies, readout, power, e-LOND, guardrails
+  services/      # application services shared by the API, MCP and CLI
   mcp/           # tool definitions (Pydantic schemas)
   api/           # FastAPI routers
   cli.py         # socialmgr connect | run | serve | mcp | approve | restore
@@ -109,15 +112,18 @@ tests/
 
 ## 4. Data model
 
-Platform IDs are strings; times are UTC.
+Platform IDs are strings; times are UTC. The schema is already shaped for several accounts, platforms and providers (§13): v1 simply has one owner row and one provider.
+
+Every table carries `workspace_id` (a constant `1` in v1), and every account-level row carries `account_id`, so peers, other platforms or a shared hosted install later add rows, not migrations.
 
 | Table | Purpose and key columns |
 |---|---|
-| `account` | One row: `external_id`, `handle`, `tz`, `premium`, `created_at` |
-| `credentials` | X access and refresh tokens, `refreshed_at` |
+| `accounts` | `platform`, `external_id`, `handle`, `role` (owner in v1; peer/competitor later), `tz`, `premium`, `follower_band`, `tracked_since`, `active` |
+| `credentials` | Per account and provider: access and refresh tokens, `refreshed_at` |
+| `providers` | Provider adapters enabled for this install, their capabilities and pricing version |
 | `runs` | `run_id`, `started_at`, `cutoff_at`, `finished_at`, `gap_since_prev_h`, `steps` (json), `spend`, `trigger` (cli/agent) |
 | `posts` | `external_id`, `created_at`, `type` (original/quote/reply/repost/self_reply), `conversation_id`, `in_reply_to_user_id`, `text`, `text_hash`, `minhash`, `has_url`, `media` (json), `text_len_weighted`, `newlines`, `gap_since_prev_min`, `own_posts_48h`, `followers_at_post`, `slot_id`, `deleted_at` |
-| `metric_snapshots` | Append-only, one row per post per run: `post_id`, `run_id`, `fetched_at`, `age_s`, `impressions`, `likes`, `reposts`, `quotes`, `replies`, `bookmarks`, `profile_clicks`, `link_clicks`, `video_q25..q100` |
+| `metric_snapshots` | Append-only, one row per post per run: `post_id`, `run_id`, `provider`, `impressions_source` (`impression_count` in v1; `viewCount` for public providers later), `fetched_at`, `age_s`, `impressions`, `likes`, `reposts`, `quotes`, `replies`, `bookmarks`, `profile_clicks`, `link_clicks`, `video_q25..q100` |
 | `analytics_buckets` | Hourly/daily buckets from `/2/tweets/analytics`, only if the day-1 probe succeeds |
 | `follower_snapshots` | Follower count at each run; `new_followers` since the last run (newest-first list) |
 | `labels` | `post_id`, `label_set_version`, `field`, `value`, `source` (rule/llm/owner), `confidence` |
@@ -125,7 +131,8 @@ Platform IDs are strings; times are UTC.
 | `forecasts` | Append-only: `subject` (slot/post), `kind` (treatment_blind/live/as_of/prior_only_uncalibrated), `model_version`, `curve_version`, `snapshot_run_id`, `metric`, `horizon_h`, `quantiles`, `p_ge_goal`, `input_manifest`, `manifest_hash`, `draws_hash`, `frozen_at` |
 | `forecast_draws` | Append-only: 1,000 joint posterior draws per forecast (compressed blob), keyed by hash |
 | `scores` | `forecast_id`, `outcome`, `capture_age_h`, `log_g_offset`, `exact`, `late_maturity`, `pit_mid`, `pit_rand`, `crps_log`, `in_80`, `in_50` |
-| `maturity_curves`, `model_versions`, `evaluations` | Versioned curve and model parameters, gate results, promotion decisions |
+| `maturity_curves`, `model_versions`, `evaluations` | Versioned curve and model parameters; `model_versions` records `family`, `prior_source`, `feature_set_version`, `code_version` and `role` (champion/challenger/retired); gate results and promotion decisions |
+| `feature_sets` | Versioned feature definitions; every forecast's manifest names the version it used |
 | `monitors` | D1–D3 state, alarms, acknowledgements |
 | `goals`, `goal_status` | Goal definitions; status with `p_hi`, `p_lo`, `reason`, `hysteresis_state` |
 | `regimes` | Seeded with MODEL §2e dates, plus entries opened when `param.rs` changes |
@@ -243,7 +250,7 @@ Estimates assume one engineer with coding agents.
 
 | # | Milestone | Ships | Acceptance | Est. |
 |---|---|---|---|---|
-| **M0** | Foundations | Repo layout, config, SQLite schema with append-only triggers, fake X client, fixture account, web shell with the shared components, CI | `socialmgr serve` shows the fixture data in the Posts table; append-only tables reject UPDATE and DELETE; backup and restore round-trip | 3–4 days |
+| **M0** | Foundations | Repo layout, config, SQLite schema with append-only triggers, fake X client, fixture account, web shell with the shared components, CI | `socialmgr serve` shows the fixture data in the Posts table; append-only tables reject UPDATE and DELETE; backup and restore round-trip; a second fake provider, `PriorSource` and `ForecastModel` plug in through config alone (§13.3) | 4–5 days |
 | **M1** | My posts against an expected range, in the app or from my agent | `socialmgr connect` (OAuth PKCE, locked refresh), run orchestrator with resumable steps, collector, follower snapshots, rule and Haiku labels, MinHash guardrail, `register_planned_post` with live forecasts, as-of forecasts, maturity curve, prior-only NB2 and the trailing-median baseline, scoring, regime registry with the `param.rs` check, backups, day-1 probes, Overview and Posts screens, MCP core tools | On a simulated clock with irregular gaps (1–3 days), every post gets a maturity capture and is scored or flagged `late_maturity`; an interrupted run resumes without re-billing in the same UTC day; every as-of forecast recomputes bit-for-bit from its manifest and doesn't change when later captures are perturbed; a planned post's forecast is frozen before its `created_at`; a member connects, runs and reads last week from Claude Code | 2 wk |
 | **M2** | Experiments | Planned slots, blind-forecast freeze, randomization, matching, protocol versioning, readout with randomization test and e-values, e-LOND, power preview, guardrails, approvals, Experiments screen, "Next posts" on Account, E01–E09 suggestions, experiment MCP tools | A simulated 4-week per-post experiment reproduces MODEL §6.3's operating characteristics within ±3 points over ≥ 1,000 replicates; A/A size 0.04–0.06; arm-harm trips in ≤ 5% of null experiments; every blind-forecast hash predates its draw; an agent can't approve its own amendment | 2.5 wk |
 | **M3** | Model health and goals | Owner-level model at 20 posts, LFO-CV, release gates and promotion, D1–D3, nowcast, follower DGLM and goal status with hysteresis, Forecasts screen, Account follower panels, model MCP tools | Each detector's false-alarm run length matches its target within ±10% over ≥ 1,000 NB-simulated replicates; goal probabilities match a 100,000-path reference within ±1 point; the follower DGLM recovers known parameters; a failed gate keeps the previous version | 2.5 wk |
@@ -257,6 +264,7 @@ Estimates assume one engineer with coding agents.
 - **Unit:** label rules, orchestrator (order, resume, idempotency), capture ages and maturity offsets, randomization, slot matching, e-LOND bookkeeping, MinHash thresholds, cost tally.
 - **Integration (real SQLite file):** a run killed mid-step and resumed; token refresh after a multi-day gap and interrupted mid-write; partial API responses; exact zero vs omitted fields; deletion keeps hashes and scores; run, `serve` and MCP open at once.
 - **Simulation (replicated):** model recovers known effects at irregular gaps; maturity curve recovers a known shape; as-of forecasts leak nothing; experiment operating characteristics; detector ARL0/ARL1; power formula vs simulation within ±0.03.
+- **Extension seams:** a fake peer provider, a second prior source and a second model family run end to end through config (§13.3).
 - **Contract:** an MCP schema test per tool; refused calls return a structured reason; a static check that no code path reaches an X write endpoint.
 
 ---
@@ -309,3 +317,48 @@ Estimates assume one engineer with coding agents.
 | Notifications | None in v1 (revision 5 removes them; the briefing covers it) |
 | Setup screen | Replaced by `socialmgr connect` (revision 5) |
 | Database | SQLite instead of PostgreSQL (revision 5) |
+| Extensibility | Peers, other or self-adapting models, other platforms and hosting must land later without rework: interfaces and multi-account schema from M0 (§13) |
+
+---
+
+## 13. Built to extend
+
+v1 is small, but its seams are the ones the later features need. Each future feature below is an **addition** (a new adapter, model, step, screen or tool) behind an interface that exists from M0. None of them changes the schema's shape, the run's structure, the forecast record or the scoring.
+
+### 13.1 The interfaces (in `socialmgr/core`, from M0)
+
+| Interface | v1 implementation | What it decouples |
+|---|---|---|
+| `DataProvider` (with capability flags: owner metrics, public metrics, search, follower lists, analytics) and a pricing model | `x_official`, `fake` | Where data comes from. The collector plans each run from the accounts' roles and the providers' capabilities, not from hard-coded endpoints. |
+| `PlatformProfile` (YAML, MODEL §1.6) | `x.yaml` | Platform mechanics: horizon, cold start, observable metrics, change-tracker source. LinkedIn or Instagram add a profile and a provider. |
+| `RunStep` registry | the 11 steps in §6 | What a run does. A new capability adds a step (e.g. "collect peers") in its place in the order; resume and checkpointing work unchanged. |
+| `FeatureSet` (versioned) | MODEL §1.4 features without embeddings | Model inputs. New features add a version; old forecasts keep the version they were frozen with. |
+| `PriorSource` | MODEL §2a hand-set priors | Where the model's priors come from. The peer-panel prior (MODEL §3) is a second implementation; the model code doesn't change. |
+| `ForecastModel`: `fit(dataset, prior, as_of) → artifact`, `predict(subject, as_of) → draws` | hierarchical NB2 (MODEL §2a) and the trailing-median baseline | The maths. Any model that returns joint draws can be frozen, scored, gated and promoted the same way. |
+| `ModelRegistry` (champion plus any number of challengers) | one champion, the baselines as benchmarks | Which model is live. Challengers are fitted and scored in shadow every run under the same rules. |
+| `ExperimentDesign` and `AllocationPolicy` | per-post micro-randomization and 4-day switchback; fixed π = 0.5 | Experiment types and how arms are drawn. ITS with controls and bandits (MODEL §6.5) are later implementations. |
+| Application services | used by the API, MCP tools and CLI | Interfaces. A new screen or tool calls an existing service; hosting later wraps the same services. |
+
+Because forecasts store **joint posterior draws plus a hashed input manifest** (not model internals), scoring, calibration, monitors, goal status and experiment readouts are model-agnostic.
+
+### 13.2 How each later feature lands
+
+| Later feature | What gets added | What stays unchanged |
+|---|---|---|
+| **Tracking other accounts (peers, competitors)** | A peer provider adapter (official API or twitterapi.io), `accounts` rows with `role = peer`, a "collect peers" run step, a peer-panel `PriorSource`, the Collection screen and peer MCP tools | Posts, snapshots, forecasts and scores tables; the owner pipeline; every screen built in v1 |
+| **Better predictions from peers** | The joint hierarchical fit and robust MAP prior (MODEL §3), the breakout model (§2d), D0, default goals from peer bands | The NB2 model code (it already takes a prior), the gates, the scoring |
+| **A different or better model** | A new `ForecastModel` registered as a challenger | Forecast freezing, scoring, the release gates (MODEL §5), promotion, the UI |
+| **A self-adapting model** | Already partly in v1: every run refits, and a challenger that passes all gates is promoted automatically, keeping the old version live otherwise. Later: an automatic challenger pool (hyperparameter and feature-set variants generated each week), online weighting of models by recent CRPS (stacking), and drift-triggered refits from D1–D3 alarms | The gates are the safety rail for any adaptation: nothing reaches the champion slot without passing them on out-of-time data |
+| **Bandits and adaptive experiments** | A Thompson-sampling `AllocationPolicy` with logged propensities and AIPW readouts (MODEL §6.5) | Slots, blind forecasts, receipts, guardrails, e-LOND |
+| **Account-level experiments** | An ITS/BSTS `ExperimentDesign` with peer controls once peers exist | The experiment engine and readout format |
+| **LinkedIn, Instagram** | A platform profile and a provider per platform | Everything platform-generic in MODEL §1.6 |
+| **Insights library, Patterns screen, public journal** | New services, tools and screens on top of existing records | The data they read |
+| **Shared team install or hosting** | PostgreSQL via SQLAlchemy (same models, Alembic migrations), auth, a scheduler that calls `start_run`, the dense capture schedule (MODEL §1.3 hosted mode) | `workspace_id` and `account_id` are already on every row; services, tools and screens are unchanged |
+
+### 13.3 Rules that keep this true
+
+- **Core never imports a provider SDK**; providers and models are chosen in config.
+- **Never store model internals in shared records.** Forecasts are draws plus a manifest; any model can produce them.
+- **Every new model, prior or feature set enters as a challenger** and must pass the release gates before it serves forecasts.
+- **Every new capability is a service first**, then a web route and an MCP tool on top of it.
+- **M0 proves the seams:** the test suite plugs in a second fake provider (public metrics only, as a peer would be), a second `PriorSource` and a second `ForecastModel` through config, with no changes outside their own modules.
