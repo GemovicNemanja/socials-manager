@@ -96,7 +96,10 @@ def label_posts(session: Session, settings: Settings, plugins: ActivePlugins, no
     pending = [
         p
         for p in owner_posts
-        if p.text and p.deleted_at is None and not _has_label(session, p.id, "content_kind", ("llm", "owner"))
+        if p.text
+        and p.deleted_at is None
+        and p.type != "repost"
+        and not _has_label(session, p.id, "content_kind", ("llm", "owner"))
     ]
     if not pending or plugins.labeler.name == "none":
         return summary

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from socialmgr.core.config import Settings
 from socialmgr.db.models import Cost, FollowerSnapshot, Forecast, MetricSnapshot, Post, Run, ScoreRow
 from socialmgr.services import draws
-from socialmgr.services.pipeline import last_finished_run, owner_account
+from socialmgr.services.pipeline import FORECAST_TYPES, last_finished_run, owner_account
 from socialmgr.services.read_models import (
     PLATFORM_LABELS,
     DataSufficiency,
@@ -341,7 +341,9 @@ def overview(session: Session, settings: Settings, now: datetime | None = None) 
     )
     total_posts = (
         session.scalar(
-            select(func.count(Post.id)).where(Post.account_id == owner.id, Post.deleted_at.is_(None))
+            select(func.count(Post.id)).where(
+                Post.account_id == owner.id, Post.deleted_at.is_(None), Post.type.in_(FORECAST_TYPES)
+            )
         )
         if owner
         else 0

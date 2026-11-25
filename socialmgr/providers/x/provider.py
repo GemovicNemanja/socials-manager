@@ -174,6 +174,10 @@ class DbTokenSource:
 # ---------------------------------------------------------------- provider
 
 
+def _is_retweet_field_error(error: dict[str, Any]) -> bool:
+    return error.get("title") == "Disallowed Resource" and "Retweets" in str(error.get("detail", ""))
+
+
 class XOwnerProvider:
     name = "x"
     capabilities = frozenset({Capability.OWNER_METRICS, Capability.FOLLOWER_LISTS})
@@ -302,13 +306,18 @@ class XOwnerProvider:
                 m["media_key"]: m.get("type", "")
                 for m in (page.body.get("includes") or {}).get("media") or ()
             }
-            if page.body.get("errors"):
-                caveats.append(f"The timeline returned {len(page.body['errors'])} partial error(s).")
+            # X refuses non-public and organic metrics on retweets; those errors are expected.
+            unexpected = [e for e in page.body.get("errors") or () if not _is_retweet_field_error(e)]
+            if unexpected:
+                caveats.append(
+                    f"The timeline returned {len(unexpected)} partial error(s), e.g. "
+                    f"{unexpected[0].get('detail') or unexpected[0].get('title')}"
+                )
             for tweet in data:
                 post = to_post(tweet, own_id, ref.account_id, media_types)
                 if post.created_at > until:
                     continue  # after this run's cutoff; the next run takes it
-                if "non_public_metrics" not in tweet:
+                if "non_public_metrics" not in tweet and post.type != "repost":
                     fallbacks += 1
                 posts.append(post)
                 metrics.append(to_metrics(tweet, fetched_at))

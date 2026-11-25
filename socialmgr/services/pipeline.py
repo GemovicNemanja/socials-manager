@@ -50,6 +50,8 @@ CODE_VERSION = "m1"
 OWNER_TERMS_MIN_POSTS = 20  # MODEL §2a minimum owner posts before owner-level terms (A22)
 LATE_MATURITY = timedelta(days=14)
 QUANTILES = (0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)
+# Reposts are someone else's content (X reports no impressions for them): stored, never forecast.
+FORECAST_TYPES = ("original", "quote", "reply", "self_reply")
 
 
 # ---------------------------------------------------------------- accounts and runs
@@ -547,7 +549,7 @@ def matured_examples(
             (MetricSnapshot.post_id == Post.id) & (MetricSnapshot.age_s == first_mature.c.age_s),
         )
         .join(Account, Account.id == Post.account_id)
-        .where(Post.deleted_at.is_(None))
+        .where(Post.deleted_at.is_(None), Post.type.in_(FORECAST_TYPES))
     ).all()
     examples = []
     for post, role, impressions, age_s in rows:
@@ -608,6 +610,17 @@ def _manifest(
         if snapshot
         else None
     )
+    followers_source = "snapshot"
+    if snapshot is None:
+        # Posted before the first run (the first run back-fills 30 days): no as-of count exists.
+        # Use the earliest count instead of 0, a small look-ahead that is flagged in the manifest.
+        followers = session.scalar(
+            select(FollowerSnapshot.followers)
+            .where(FollowerSnapshot.account_id == account_id)
+            .order_by(FollowerSnapshot.fetched_at, FollowerSnapshot.id)
+            .limit(1)
+        )
+        followers_source = "first_run_backfill"
     created_at = datetime.fromisoformat(subject["created_at"])
     return {
         "snapshot_run_id": snapshot.id if snapshot else None,
@@ -616,6 +629,7 @@ def _manifest(
         "curve_version": curve.version,
         "regime_id": regime_at(session, workspace_id, platform, created_at, cutoff),
         "subject": {**subject, "followers_at_post": followers or 0},
+        "followers_source": followers_source,
         "training": [e.model_dump(mode="json") for e in examples],
         "seed": snapshot.id if snapshot else 0,
     }
@@ -764,7 +778,7 @@ def freeze_as_of_forecasts(
         post
         for post in session.scalars(
             select(Post)
-            .where(Post.account_id == owner.id, Post.deleted_at.is_(None))
+            .where(Post.account_id == owner.id, Post.deleted_at.is_(None), Post.type.in_(FORECAST_TYPES))
             .order_by(Post.created_at)
         )
         if f"post:{post.id}" not in frozen

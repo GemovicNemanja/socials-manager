@@ -12,6 +12,7 @@ from socialmgr.core.config import Settings
 from socialmgr.db.models import Cost, Forecast, Label, MetricSnapshot, Post, Run, ScoreRow
 from socialmgr.modelling import maturity, scoring
 from socialmgr.services.pipeline import (
+    FORECAST_TYPES,
     OWNER_TERMS_MIN_POSTS,
     curve_as_of,
     last_finished_run,
@@ -138,7 +139,9 @@ def shell(session: Session, settings: Settings, now: datetime | None = None) -> 
     )
     posts = (
         session.scalar(
-            select(func.count(Post.id)).where(Post.account_id == owner.id, Post.deleted_at.is_(None))
+            select(func.count(Post.id)).where(
+                Post.account_id == owner.id, Post.deleted_at.is_(None), Post.type.in_(FORECAST_TYPES)
+            )
         )
         if owner
         else 0
@@ -186,7 +189,7 @@ def list_posts(
     if owner is not None:
         posts = session.scalars(
             select(Post)
-            .where(Post.account_id == owner.id, Post.deleted_at.is_(None))
+            .where(Post.account_id == owner.id, Post.deleted_at.is_(None), Post.type.in_(FORECAST_TYPES))
             .order_by(Post.created_at.desc())
         ).all()
         forecasts = {

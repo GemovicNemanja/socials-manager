@@ -173,3 +173,20 @@ def test_label_step_failure_is_a_caveat_not_a_failed_run(tmp_path: Path) -> None
     assert any("logged in" in c for c in outcome.steps["label"]["result"]["caveats"])
     briefing = session.scalar(select(Briefing.summary).where(Briefing.run_id == outcome.run_id))
     assert briefing is not None and "LLM labels skipped" in briefing
+
+
+def test_claude_code_labeler_falls_back_to_the_text_result() -> None:
+    labels = {"labels": [{"key": "post:1", "topic": "ai", "content_kind": "demo", "hook_type": "none"}]}
+
+    def runner(argv: list[str], stdin: str) -> str:
+        return json.dumps({"is_error": False, "subtype": "success", "result": json.dumps(labels)})
+
+    assert ClaudeCodeLabeler(runner=runner).label(ITEMS)[0].values["topic"] == "ai"
+
+
+def test_claude_code_labeler_says_why_when_nothing_usable_comes_back() -> None:
+    def runner(argv: list[str], stdin: str) -> str:
+        return json.dumps({"is_error": False, "subtype": "error_max_turns", "result": "I couldn't"})
+
+    with pytest.raises(LabelerError, match="error_max_turns"):
+        ClaudeCodeLabeler(runner=runner).label(ITEMS)

@@ -3,6 +3,7 @@
 import json
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -68,7 +69,17 @@ Runner = Callable[[list[str], str], str]  # (argv, stdin) -> stdout
 
 
 def _run_subprocess(argv: list[str], stdin: str) -> str:
-    proc = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=300, check=False)
+    # Run outside any project folder so a repository's CLAUDE.md, hooks or settings can't change
+    # the labelling call.
+    proc = subprocess.run(
+        argv,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+        cwd=tempfile.gettempdir(),
+    )
     if proc.returncode != 0:
         raise LabelerError(f"claude exited with {proc.returncode}: {proc.stderr.strip()[:300]}")
     return proc.stdout
@@ -107,7 +118,19 @@ class ClaudeCodeLabeler:
             out = json.loads(self._runner(argv, prompt_for(batch)))
             if out.get("is_error"):
                 raise LabelerError(f"claude returned an error: {str(out.get('result'))[:300]}")
-            results += parse_labels(out.get("structured_output"), {i.key for i in batch})
+            payload = out.get("structured_output")
+            if payload is None:  # older CLIs, or a reply that put the JSON in the text result
+                try:
+                    payload = json.loads(str(out.get("result") or ""))
+                except json.JSONDecodeError:
+                    payload = None
+            parsed = parse_labels(payload, {i.key for i in batch})
+            if not parsed:
+                raise LabelerError(
+                    f"claude returned no usable labels (subtype {out.get('subtype')!r}): "
+                    f"{str(out.get('result'))[:200]}"
+                )
+            results += parsed
         return results
 
 

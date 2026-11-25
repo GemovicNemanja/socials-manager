@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from socialmgr.core.config import Settings
-from socialmgr.db.models import Forecast, Post
+from socialmgr.db.models import FollowerSnapshot, Forecast, Post
 from socialmgr.services import draws, pipeline
 from socialmgr.services.hashing import sha256_json
 from socialmgr.services.plugins import load_plugins
@@ -34,8 +34,20 @@ def test_manifest_ignores_later_data(loaded: sessionmaker[Session]) -> None:
 
 
 def test_followers_at_post_come_from_an_earlier_run(loaded: sessionmaker[Session]) -> None:
+    """As-of follower counts come from the snapshot run; posts from before the first run use the
+    earliest count and say so (never a silent 0)."""
     with loaded() as session:
+        first_count = session.scalar(
+            select(FollowerSnapshot.followers).order_by(FollowerSnapshot.fetched_at).limit(1)
+        )
         for fc in session.scalars(select(Forecast)):
-            subject = fc.input_manifest["subject"]
-            if fc.input_manifest["snapshot_run_id"] is None:
-                assert subject["followers_at_post"] == 0
+            m = fc.input_manifest
+            if m["snapshot_run_id"] is None:
+                assert m["followers_source"] == "first_run_backfill"
+                assert m["subject"]["followers_at_post"] == first_count
+            else:
+                assert m["followers_source"] == "snapshot"
+                snap = session.scalar(
+                    select(FollowerSnapshot.followers).where(FollowerSnapshot.run_id == m["snapshot_run_id"])
+                )
+                assert m["subject"]["followers_at_post"] == snap

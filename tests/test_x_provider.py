@@ -148,7 +148,8 @@ def test_timeline_pagination_classification_and_metrics(settings: Settings) -> N
     assert (acct.external_id, acct.followers, acct.fetched_at) == (OWN_ID, 4321, NOW)
     assert acct.new_follower_ids == ("f3", "f2", "f1")  # a baseline sample: no known followers given
     assert _q(next(c for c in fake.calls if c.url.path == FL))["max_results"] == "100"
-    assert any("public impression_count" in c for c in batch.caveats)
+    # X never returns non-public metrics for retweets, so the repost (15) isn't a fallback caveat.
+    assert not any("public impression_count" in c for c in batch.caveats)
     # 1 user lookup + 7 posts returned (including the one after the cutoff) + 3 follower records
     assert batch.cost_usd == pytest.approx(0.011)
 
@@ -302,3 +303,23 @@ def test_pipeline_collects_through_x_provider(settings: Settings, factory: sessi
         assert again.cost_usd == 0
         fs2 = session.scalars(select(FollowerSnapshot).where(FollowerSnapshot.run_id == run2.id)).one()
         assert fs2.new_followers == 0
+
+
+def test_retweet_field_errors_are_expected_others_are_reported(settings: Settings) -> None:
+    s = x_settings(settings)
+    page = _page([tweet("11", NOW - timedelta(hours=2), non_public=False)])
+    page["errors"] = [
+        {
+            "title": "Disallowed Resource",
+            "detail": "The 'organic_metrics.impression_count' field cannot be queried for Retweets.",
+        },
+        {"title": "Not Found Error", "detail": "Could not find tweet with referenced_tweets.id: [9]."},
+    ]
+    fake = FakeX().on("/2/users/me", respond(me_body())).on(TL, respond(page)).on(FL, respond(_users()))
+    provider = XOwnerProvider(s, http=fake.client(), tokens=lambda account_id: "tok", clock=lambda: NOW)
+    batch = provider.collect(CollectionRequest(accounts=(_ref(),), since=None, until=NOW))
+    partial = [c for c in batch.caveats if "partial error" in c]
+    assert partial == [
+        "The timeline returned 1 partial error(s), e.g. Could not find tweet with referenced_tweets.id: [9]."
+    ]
+    assert any("public impression_count" in c for c in batch.caveats)  # an own post without them
