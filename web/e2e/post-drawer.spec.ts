@@ -31,8 +31,9 @@ test.describe("Posts detail drawer", () => {
       ["p75", q.q75],
       ["p95", q.q95],
     ] as const) {
-      await expect(quantiles.getByText(name, { exact: true })).toBeVisible();
-      await expect(quantiles.getByText(int(value), { exact: true })).toBeVisible();
+      // The range strip's legend repeats some labels, so match the first occurrence.
+      await expect(quantiles.getByText(name, { exact: true }).first()).toBeVisible();
+      await expect(quantiles.getByText(int(value), { exact: true }).first()).toBeVisible();
     }
     await expect(drawer.getByRole("img", { name: /expected 80% range|expected range/i })).toBeVisible();
     const score = drawer.getByLabel("Score");

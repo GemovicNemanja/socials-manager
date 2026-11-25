@@ -400,6 +400,17 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
 # ---------------------------------------------------------------- labels
 
 
+def pick_labels(labels: list[Label]) -> dict[str, Label]:
+    """One label per field: owner over provider over LLM over rule; newest wins within a source."""
+    best: dict[str, Label] = {}
+    for lb in labels:
+        cur = best.get(lb.field)
+        key = (SOURCE_PRECEDENCE.get(lb.source, 0), lb.created_at, lb.id)
+        if cur is None or key > (SOURCE_PRECEDENCE.get(cur.source, 0), cur.created_at, cur.id):
+            best[lb.field] = lb
+    return best
+
+
 def effective_labels(session: Session, post_id: int) -> dict[str, str]:
     """One value per field: owner over provider over LLM over rule; newest wins within a source."""
     rows = session.execute(

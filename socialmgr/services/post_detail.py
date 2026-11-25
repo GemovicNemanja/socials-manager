@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from socialmgr.core.config import Settings
 from socialmgr.db.models import Forecast, Label, MetricSnapshot, Post, ScoreRow
-from socialmgr.modelling import maturity, scoring
-from socialmgr.services.pipeline import owner_account
+from socialmgr.modelling import scoring
+from socialmgr.services.pipeline import load_curve, owner_account, pick_labels
 from socialmgr.services.read_models import Envelope, ForecastKind, PostItem, list_posts
 
 
@@ -99,17 +99,19 @@ class PostDetail(Envelope):
 CURVE_AGES_H = (0.25, 0.5, 1, 2, 3, 4, 6, 9, 12, 18, 24, 30, 36, 42, 48, 60, 72, 96, 120, 144, 168)
 
 
-def _by_age(fc: Forecast) -> list[CurvePoint]:
-    """Only for curves this code knows; a fitted curve (M1) will bring its own G(a)."""
-    if fc.curve_version != maturity.PRIOR_CURVE_VERSION:
+def _by_age(session: Session, fc: Forecast) -> list[CurvePoint]:
+    """The 48h forecast mapped to other ages with the curve version frozen with the forecast."""
+    try:
+        curve = load_curve(session, fc.curve_version)
+    except LookupError:
         return []
     q = fc.quantiles
     return [
         CurvePoint(
             age_h=age,
-            q10=round(q["q10"] * maturity.prior_curve(age), 1),
-            q50=round(q["q50"] * maturity.prior_curve(age), 1),
-            q90=round(q["q90"] * maturity.prior_curve(age), 1),
+            q10=round(q["q10"] * curve.g(age), 1),
+            q50=round(q["q50"] * curve.g(age), 1),
+            q90=round(q["q90"] * curve.g(age), 1),
         )
         for age in CURVE_AGES_H
     ]
@@ -131,9 +133,7 @@ def post_detail(session: Session, settings: Settings, post_id: int) -> PostDetai
     if item is None:
         return None
 
-    latest_labels: dict[str, Label] = {}
-    for label in session.scalars(select(Label).where(Label.post_id == post.id).order_by(Label.created_at)):
-        latest_labels[label.field] = label
+    latest_labels = pick_labels(list(session.scalars(select(Label).where(Label.post_id == post.id))))
 
     fc = session.scalar(
         select(Forecast)
@@ -180,7 +180,7 @@ def post_detail(session: Session, settings: Settings, post_id: int) -> PostDetai
             manifest_hash=fc.manifest_hash,
             draws_hash=fc.draws_hash,
             snapshot_run_id=f"run:{fc.snapshot_run_id}" if fc.snapshot_run_id is not None else None,
-            by_age=_by_age(fc),
+            by_age=_by_age(session, fc),
         )
         if fc
         else None,

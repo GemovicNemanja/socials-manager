@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 from socialmgr.core.config import Settings
 from socialmgr.db.models import Cost, Forecast, Label, MetricSnapshot, Post, Run, ScoreRow
 from socialmgr.modelling import maturity, scoring
-from socialmgr.services.pipeline import OWNER_TERMS_MIN_POSTS, last_finished_run, owner_account
+from socialmgr.services.pipeline import (
+    OWNER_TERMS_MIN_POSTS,
+    curve_as_of,
+    last_finished_run,
+    owner_account,
+    pick_labels,
+)
 
 Status = Literal["above", "as_expected", "below", "provisional", "no_forecast"]
 StatusFilter = Literal["all", "above", "as_expected", "below", "provisional", "no_forecast"]
@@ -206,11 +212,11 @@ def list_posts(
                 )
             )
         }
-        labels: dict[int, dict[str, str]] = {}
-        for post_id, fld, value in session.execute(
-            select(Label.post_id, Label.field, Label.value).order_by(Label.created_at)
-        ):
-            labels.setdefault(post_id, {})[fld] = value
+        by_post: dict[int, list[Label]] = {}
+        for lb in session.scalars(select(Label)):
+            by_post.setdefault(lb.post_id, []).append(lb)
+        labels = {pid: {f: lb.value for f, lb in pick_labels(rows).items()} for pid, rows in by_post.items()}
+        curve = curve_as_of(session, settings.workspace_id, last_run.cutoff_at if last_run else None)
         owner_n = sum(1 for s in scores.values() if not s.late_maturity)
         for post in posts:
             fc = forecasts.get(f"post:{post.id}")
@@ -220,7 +226,7 @@ def list_posts(
             if sc is not None:
                 i48 = I48(value=round(sc.outcome), exact=sc.exact, provisional=False)
             elif snap is not None and snap.impressions is not None:
-                estimate = maturity.estimate_i48(snap.impressions, age_h)
+                estimate = curve.estimate_i48(snap.impressions, age_h)
                 i48 = I48(
                     value=round(estimate) if estimate is not None else None, exact=False, provisional=True
                 )
@@ -258,7 +264,7 @@ def list_posts(
                     status=item_status,
                 )
             )
-    caveats = ["48h values are estimated with the prior maturity curve until M1 fits it"]
+    caveats = ["48h values for posts under 48 hours are estimated with the latest fitted maturity curve"]
     reason = None
     if owner_n < OWNER_TERMS_MIN_POSTS:
         reason = "prior_only_uncalibrated"
