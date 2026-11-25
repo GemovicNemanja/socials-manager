@@ -220,3 +220,12 @@ def plan(
         )
         for hit in result.guardrails:
             typer.echo(f"{hit.severity}: {hit.detail}")
+
+
+@app.command()
+def mcp() -> None:
+    """Serve the agent tools over MCP (stdio). Add to Claude Code with:
+    claude mcp add socialmgr -- uv run --directory <this folder> socialmgr mcp"""
+    from socialmgr.agent_server import main
+
+    main()

@@ -233,3 +233,50 @@ def match_planned(session: Session, settings: Settings, cutoff: datetime) -> Mat
             summary.missed += 1
     session.flush()
     return summary
+
+
+@dataclass
+class DraftForecast:
+    quantiles: dict[str, float]
+    model_version: str
+    calibrated: bool
+    curve_version: str
+    guardrails: list[GuardrailHit]
+    labels: dict[str, str]
+
+
+def draft_forecast(
+    session: Session, settings: Settings, plugins: ActivePlugins, req: PlanRequest, now: datetime
+) -> DraftForecast:
+    """What a planned post would be forecast at, without registering or freezing anything."""
+    owner = pipeline.owner_account(session, settings.workspace_id)
+    if owner is None:
+        raise ValueError("no owner account yet: run `socialmgr run` first")
+    labels = dict(req.labels)
+    if req.text:
+        feats = rules.text_features(req.text)
+        labels.setdefault("has_url", "true" if feats.has_url else "false")
+        labels.setdefault(
+            "format", rules.format_label(post_type=req.post_type, media_kind=None, has_url=feats.has_url)
+        )
+    draft = PlannedSlot(
+        workspace_id=settings.workspace_id,
+        account_id=owner.id,
+        planned_at=req.planned_at,
+        post_type=req.post_type,
+        labels=labels,
+        state="draft",
+        registered_by=req.registered_by,
+        created_at=now,
+    )
+    manifest = pipeline.build_live_manifest(session, settings.workspace_id, draft, now)
+    manifest["subject"]["subject_id"] = f"draft:{sha256_text(req.model_dump_json())[:16]}"
+    version, calibrated, predicted = pipeline.forecast_from_manifest(plugins, manifest)
+    return DraftForecast(
+        quantiles={f"q{round(q * 100):02d}": predicted.quantile(q) for q in pipeline.QUANTILES},
+        model_version=version,
+        calibrated=calibrated,
+        curve_version=manifest["curve_version"],
+        guardrails=check_guardrails(session, owner.id, req, now),
+        labels=labels,
+    )
