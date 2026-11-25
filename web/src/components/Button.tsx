@@ -12,10 +12,10 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 }
 
 const rootByVariant: Record<ButtonVariant, string> = {
-  default: "border-rule px-3 text-muted hover:bg-raised",
-  secondary: "border-rule px-3 text-muted hover:bg-raised",
-  primary: "border-text bg-text px-3 text-ground hover:bg-neutral",
-  ghost: "border-transparent px-2 text-accent hover:bg-accent-subtle",
+  default: "border-rule px-3 text-muted hover:bg-raised disabled:hover:bg-transparent",
+  secondary: "border-rule px-3 text-muted hover:bg-raised disabled:hover:bg-transparent",
+  primary: "border-text bg-text px-3 text-ground hover:bg-neutral disabled:hover:bg-text",
+  ghost: "border-transparent px-2 text-accent hover:bg-accent-subtle disabled:hover:bg-transparent",
 };
 
 const labelByVariant: Record<ButtonVariant, string> = {
@@ -40,7 +40,7 @@ export function Button({
     <button
       type={type}
       className={cx(
-        "flex items-center gap-1.5 rounded-sm border font-sans disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent",
+        "flex items-center gap-1.5 rounded-sm border font-sans disabled:cursor-default disabled:opacity-60",
         rootByVariant[variant],
         className ?? "h-7 w-fit",
       )}

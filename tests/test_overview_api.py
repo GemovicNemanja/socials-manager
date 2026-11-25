@@ -105,7 +105,8 @@ def test_overview_names_pending_areas(settings: Settings, loaded: sessionmaker[S
     areas = {a["area"]: a["milestone"] for a in overview(settings)["pending_areas"]}
     assert areas["follower_forecast"] == "M3"
     assert areas["model_health"] == "M3"
-    assert "briefing" in areas
+    # The briefing and planned posts shipped in M1 (/api/briefing, /api/planned).
+    assert "briefing" not in areas and "planned_posts" not in areas
 
 
 def test_overview_ignores_slot_forecasts(settings: Settings, loaded: sessionmaker[Session]) -> None:

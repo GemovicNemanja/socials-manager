@@ -39,6 +39,18 @@ test.describe("Overview screen against the real backend", () => {
     await expect(tiles.getByText(int(ov.tiles.profile_visits_7d.value), { exact: true })).toBeVisible();
     await expect(tiles.getByText(ov.tiles.follows_per_1k_7d.value.toFixed(2), { exact: true })).toBeVisible();
     await expect(tiles.getByText("Posts, 7d")).toBeVisible();
+
+    // Past results read in words against their expected range (MODEL §4.1: p ≥ 0.8 above, ≤ 0.2 below).
+    const outcome = (p: number) => (p >= 0.8 ? "Above expected" : p <= 0.2 ? "Below expected" : "As expected");
+    for (const [label, kpi] of [
+      ["Impressions, 7d", impressions],
+      ["Median 48h impressions", median],
+    ] as const) {
+      const tile = tiles.locator("div", { has: page.getByText(label, { exact: true }) }).last();
+      await expect(tile.getByText(outcome(kpi.expected.percentile), { exact: true })).toBeVisible();
+      await expect(tile.getByText(/^expected .+ \(80%\)$/)).toBeVisible();
+    }
+    await expect(tiles.getByText("no forecast yet · M3", { exact: false })).toHaveCount(3);
   });
 
   test("status counts, calibration and the follower chart placeholder", async ({ page, request }) => {
@@ -82,14 +94,36 @@ test.describe("Overview screen against the real backend", () => {
     await expect(page.getByRole("dialog", { name: "Post detail" })).toContainText(ov.recent_posts[1].text);
   });
 
-  test("last run panel and navigation", async ({ page, request }) => {
-    const ov = await overview(request);
+  test("briefing panel shows the latest run's briefing with record ids", async ({ page, request }) => {
+    const briefing = await (await request.get("/api/briefing")).json();
+    const b = briefing.briefing;
     await page.goto("/#/overview");
-    const run = page.getByRole("region", { name: "Last run" });
-    await expect(run.getByText(`Run ${ov.last_run.id.replace("run:", "")} finished`, { exact: false })).toBeVisible();
-    await expect(run.getByRole("meter", { name: /X API/ })).toBeVisible();
-    await expect(run.getByText(/Briefings arrive in/)).toBeVisible();
+    const panel = page.getByRole("region", { name: "Last briefing" });
+    await expect(panel.getByText(`run ${briefing.run_id} ·`, { exact: false })).toBeVisible();
+    await expect(panel.getByText("Too early", { exact: true })).toBeVisible();
+    const scored = b.scored.above + b.scored.as_expected + b.scored.below;
+    const happened = panel.getByRole("region", { name: "What happened" });
+    await expect(happened.getByText(`${b.new_posts} new posts; ${scored} reached 48h`, { exact: false })).toBeVisible();
+    expect(b.notable.length).toBeGreaterThan(0);
+    for (const n of b.notable.slice(0, 5)) {
+      await expect(happened.getByRole("link", { name: n.post, exact: true })).toBeVisible();
+    }
+    if (b.near_duplicates.length) {
+      await expect(happened.getByText(`${b.near_duplicates.length} new posts look like near-duplicates`)).toBeVisible();
+    }
+    await expect(panel.getByRole("meter", { name: /X API/ })).toBeVisible();
+    await expect(panel.getByText(`This run cost $${b.spend.run_usd.toFixed(3)}.`)).toBeVisible();
+    await expect(panel.getByText(/Briefings arrive in/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Start run", exact: true })).toBeEnabled();
 
+    const first = b.notable[0];
+    await happened.getByRole("link", { name: first.post, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`#/posts/${first.post.replace("post:", "")}$`));
+    await expect(page.getByRole("dialog", { name: "Post detail" })).toBeVisible();
+  });
+
+  test("navigation from the recent posts panel", async ({ page }) => {
+    await page.goto("/#/overview");
     await page.getByRole("link", { name: "Open posts" }).click();
     await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
     await page.getByRole("navigation", { name: "Main" }).getByText("Overview", { exact: true }).click();
@@ -116,6 +150,19 @@ test.describe("Overview day zero (empty database)", () => {
     const tiles = page.getByRole("region", { name: "Expectations" });
     await expect(tiles.getByText("first run sets the baseline")).toBeVisible();
     await expect(page.getByRole("region", { name: "Recent posts" })).toHaveCount(0);
+    await expect(checklist.getByRole("button", { name: "Start run" })).toBeEnabled();
+    await expect(checklist.getByRole("button", { name: "Set goal" })).toBeDisabled();
     await page.screenshot({ path: "e2e/.results/overview-day-zero.png" });
+  });
+
+  test("the checklist's Register post opens the dialog; a draft range waits for the first run", async ({ page }) => {
+    // Opens the dialog only: registering or running here would change the empty database.
+    await page.goto(`${EMPTY_BACKEND}/#/overview`);
+    await page.getByRole("region", { name: "Getting started" }).getByRole("button", { name: "Register post" }).click();
+    const dialog = page.getByRole("dialog", { name: "Register a planned post" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/A draft range needs one finished run/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
   });
 });

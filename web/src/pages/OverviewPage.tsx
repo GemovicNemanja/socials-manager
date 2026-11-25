@@ -1,8 +1,19 @@
-import type { ReactNode } from "react";
-import { useOverview } from "../api/hooks";
-import type { FollowerPoint, Kpi, OverviewResponse } from "../api/models";
-import { Badge } from "../components/Badge";
+import { useQueryClient } from "@tanstack/react-query";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useBriefing, useOverview, useRunStatus, useSchedule, useStartRun } from "../api/hooks";
+import type {
+  BriefingResponse,
+  Confidence,
+  FollowerPoint,
+  Kpi,
+  OverviewResponse,
+  PlannedSlot,
+  RunStatus,
+  RunStatusResponse,
+} from "../api/models";
+import { Badge, type BadgeTone } from "../components/Badge";
 import { Button } from "../components/Button";
+import { CollectionErrorBanner } from "../components/CollectionErrorBanner";
 import { ColumnHeader } from "../components/ColumnHeader";
 import { CountRow } from "../components/CountRow";
 import { ExpectationTile, type ExpectationTileProps, type ExpectationTileReading } from "../components/ExpectationTile";
@@ -11,6 +22,7 @@ import { LegendItem } from "../components/LegendItem";
 import { Meter } from "../components/Meter";
 import { PanelHeader } from "../components/PanelHeader";
 import { PostTableRow } from "../components/PostTableRow";
+import { RunProgressPanel } from "../components/RunProgressPanel";
 import { cx } from "../lib/cx";
 import {
   EMPTY,
@@ -18,16 +30,18 @@ import {
   formatCompact,
   formatDateTime,
   formatDay,
-  formatDecimal,
   formatInt,
+  formatLabel,
   formatPercent,
   formatPercentile,
   formatSigned,
   formatUsd,
 } from "../lib/format";
 import { href, navigate } from "../lib/router";
+import { useNow } from "../lib/useNow";
+import { RegisterPlannedPostDialog } from "./RegisterPlannedPostDialog";
 
-const RUN_FROM_CLI = "Runs start from the terminal for now: socialmgr run";
+const START_RUN_TITLE = "Collect from X now, label, freeze forecasts and score matured posts (about a minute)";
 const CheckIcon = icons.ActionCheck;
 
 /** MODEL §4.1 thresholds, applied to a KPI's percentile under its predictive distribution. */
@@ -36,6 +50,13 @@ function readingOf(percentile: number): ExpectationTileReading {
   if (percentile <= 0.2) return "below";
   return "default";
 }
+
+/** The verbal outcome of a KPI against its expected range, coloured like the post status pills. */
+const OUTCOME: Record<"above" | "default" | "below", NonNullable<ExpectationTileProps["outcome"]>> = {
+  above: { label: "Above expected", status: "working" },
+  default: { label: "As expected", status: "insufficient" },
+  below: { label: "Below expected", status: "not-working" },
+};
 
 /** Percentile 0.1..0.9 maps onto the band (0.2..0.8 of the strip). */
 function stripPosition(percentile: number): number {
@@ -47,14 +68,16 @@ function rangeTile(label: string, kpi: Kpi, value: string, delta: string, empty:
   if (kpi.value == null || !e) {
     return { label, value: kpi.value == null ? EMPTY : value, delta, percentile: EMPTY, range: empty, reading: "none" };
   }
+  const reading = readingOf(e.percentile);
   return {
     label,
     value,
     delta,
     percentile: formatPercentile(e.percentile),
-    range: `exp. ${formatCompact(e.q10)}–${formatCompact(e.q90)}`,
-    reading: readingOf(e.percentile),
+    range: `expected ${formatCompact(e.q10)}–${formatCompact(e.q90)} (80%)`,
+    reading,
     position: stripPosition(e.percentile),
+    outcome: OUTCOME[reading === "above" || reading === "below" ? reading : "default"],
   };
 }
 
@@ -71,9 +94,9 @@ function buildTiles(ov: OverviewResponse): ExpectationTileProps[] {
       percentile: EMPTY,
       range:
         f.change_28d != null
-          ? `${formatSigned(f.change_28d)} in 28d · forecast in M3`
+          ? `no forecast yet · M3 · ${formatSigned(f.change_28d)} in 28d`
           : f.now != null
-            ? "forecast in M3"
+            ? "no forecast yet · M3"
             : "first run sets the baseline",
       reading: "none",
     },
@@ -97,7 +120,7 @@ function buildTiles(ov: OverviewResponse): ExpectationTileProps[] {
       delta:
         t.profile_visit_share_7d.value != null ? `${formatPercent(t.profile_visit_share_7d.value)} of impr.` : "no posts yet",
       percentile: EMPTY,
-      range: noPosts ? "needs matured posts" : "no forecast yet",
+      range: noPosts ? "needs matured posts" : "no forecast yet · M3",
       reading: "none",
     },
     {
@@ -106,7 +129,7 @@ function buildTiles(ov: OverviewResponse): ExpectationTileProps[] {
       delta:
         t.visit_to_follow_7d.value != null ? `visit→follow ${formatPercent(t.visit_to_follow_7d.value)}` : "no posts yet",
       percentile: EMPTY,
-      range: noPosts ? "needs matured posts" : "no forecast yet",
+      range: noPosts ? "needs matured posts" : "no forecast yet · M3",
       reading: "none",
     },
     {
@@ -115,17 +138,50 @@ function buildTiles(ov: OverviewResponse): ExpectationTileProps[] {
       delta: noPosts ? "none yet" : `${formatInt(t.posts_7d.previous)} the 7d before`,
       percentile: EMPTY,
       range: noPosts
-        ? "planned posts arrive in M1"
+        ? "register planned posts"
         : `${counts.above} above · ${counts.below} below · ${counts.provisional} under 48h`,
       reading: "none",
     },
   ];
 }
 
+/** Run state shared by the top bar, the briefing slot and the day-zero checklist. */
+interface RunControl {
+  running: boolean;
+  status: RunStatusResponse | undefined;
+  /** The run the progress panel shows: the unfinished one, or null while a started run isn't visible yet. */
+  shown: RunStatus | null;
+  start: () => void;
+}
+
+function useRunControl(): RunControl {
+  const client = useQueryClient();
+  const startRun = useStartRun();
+  const status = useRunStatus(startRun.isPending);
+  const data = status.data;
+  const running = startRun.isPending || !!data?.active;
+
+  // A run seen running (here or started from the terminal) has ended: refresh every screen's data.
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running) void client.invalidateQueries();
+    wasRunning.current = running;
+  }, [running, client]);
+
+  const latest = data?.latest ?? null;
+  const latestIsNew = latest != null && Date.parse(latest.started_at) >= startRun.submittedAt - 1000;
+  const shown = data?.unfinished ?? (startRun.isPending && !latestIsNew ? null : latest);
+  return { running, status: data, shown, start: () => startRun.mutate() };
+}
+
 export function OverviewPage() {
   const overview = useOverview();
   const ov = overview.data;
   const tz = ov?.account?.tz ?? "UTC";
+  const run = useRunControl();
+  const [registering, setRegistering] = useState(false);
+  const [dismissed, setDismissed] = useState<number | null>(null);
+  const failure = !run.running ? run.status?.failure : null;
 
   const context = ov
     ? ov.total_posts === 0
@@ -149,8 +205,26 @@ export function OverviewPage() {
             as of {formatDateTime(ov.as_of, tz)}
           </span>
         )}
-        <Button label="Start run" icon="ActorSystem" variant="primary" disabled title={RUN_FROM_CLI} />
+        <Button
+          label={run.running ? "Running…" : "Start run"}
+          icon="ActorSystem"
+          variant="primary"
+          disabled={run.running}
+          title={START_RUN_TITLE}
+          onClick={run.start}
+        />
       </header>
+
+      {failure && failure.run_id !== dismissed && (
+        <CollectionErrorBanner
+          title={failure.title}
+          detail={failure.detail}
+          command={failure.command}
+          actionLabel="Start run again"
+          onAction={run.start}
+          onDismiss={() => setDismissed(failure.run_id)}
+        />
+      )}
 
       {overview.isPending ? (
         <Message>Loading overview…</Message>
@@ -160,13 +234,23 @@ export function OverviewPage() {
           running?
         </Message>
       ) : (
-        <OverviewBody ov={overview.data} tz={tz} />
+        <OverviewBody ov={overview.data} tz={tz} run={run} onRegister={() => setRegistering(true)} />
       )}
+
+      {registering && <RegisterPlannedPostDialog tz={tz} onClose={() => setRegistering(false)} />}
     </div>
   );
 }
 
-function OverviewBody({ ov, tz }: { ov: OverviewResponse; tz: string }) {
+interface BodyProps {
+  ov: OverviewResponse;
+  tz: string;
+  run: RunControl;
+  onRegister: () => void;
+}
+
+function OverviewBody(props: BodyProps) {
+  const { ov } = props;
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <section aria-label="Expectations" className="flex w-full shrink-0 border-b border-rule">
@@ -174,12 +258,25 @@ function OverviewBody({ ov, tz }: { ov: OverviewResponse; tz: string }) {
           <ExpectationTile key={tile.label} {...tile} className="min-w-0 flex-1" />
         ))}
       </section>
-      {ov.total_posts === 0 ? <DayZero ov={ov} /> : <Dashboard ov={ov} tz={tz} />}
+      {ov.total_posts === 0 ? <DayZero {...props} /> : <Dashboard {...props} />}
     </div>
   );
 }
 
-function Dashboard({ ov, tz }: { ov: OverviewResponse; tz: string }) {
+function RunProgress({ run, tz }: { run: RunControl; tz: string }) {
+  const status = run.status;
+  return (
+    <RunProgressPanel
+      run={run.shown}
+      stepNames={status?.latest?.steps.map((s) => s.name) ?? Object.keys(status?.step_summaries ?? {})}
+      summaries={status?.step_summaries ?? {}}
+      details={run.shown ? (status?.step_details ?? {}) : {}}
+      tz={tz}
+    />
+  );
+}
+
+function Dashboard({ ov, tz, run, onRegister }: BodyProps) {
   return (
     <>
       <div className="flex h-[330px] w-full shrink-0 border-b border-rule font-sans">
@@ -222,7 +319,7 @@ function Dashboard({ ov, tz }: { ov: OverviewResponse; tz: string }) {
             </div>
           </div>
         </section>
-        <RunPanel ov={ov} tz={tz} />
+        {run.running ? <RunProgress run={run} tz={tz} /> : <BriefingPanel ov={ov} tz={tz} onRegister={onRegister} />}
       </div>
     </>
   );
@@ -432,39 +529,145 @@ function BriefingLine({ children }: { children: ReactNode }) {
   return <span className="text-[13px] leading-[1.45] text-text">{children}</span>;
 }
 
-function RunPanel({ ov, tz }: { ov: OverviewResponse; tz: string }) {
-  const run = ov.last_run;
-  const spend = ov.spend;
+const CONFIDENCE_BADGE: Record<Confidence, { label: string; tone: BadgeTone }> = {
+  "too early": { label: "Too early", tone: "warn" },
+  suggestive: { label: "Suggestive", tone: "accent" },
+  solid: { label: "Solid", tone: "positive" },
+};
+
+const NOTABLE_TEXT: Record<"above" | "as_expected" | "below", string> = {
+  above: "above its range",
+  as_expected: "as expected",
+  below: "below its range",
+};
+
+const POST_TYPE_TEXT: Record<string, string> = {
+  original: "Original",
+  quote: "Quote",
+  reply: "Reply",
+  self_reply: "Thread reply",
+  repost: "Repost",
+};
+
+function RecordLink({ id }: { id: string }) {
   return (
-    <section aria-label="Last run" className="flex w-[400px] shrink-0 flex-col">
+    <a
+      href={href("posts", id.replace(/^post:/, ""))}
+      className="font-mono text-xs leading-[1.45] whitespace-nowrap text-accent hover:underline"
+    >
+      {id}
+    </a>
+  );
+}
+
+function WhatHappened({ briefing }: { briefing: BriefingResponse }) {
+  const b = briefing.briefing;
+  if (!b) return <BriefingLine>No run has finished yet. Start one to collect your posts.</BriefingLine>;
+  const scored = b.scored.above + b.scored.as_expected + b.scored.below;
+  return (
+    <>
+      <BriefingLine>
+        {formatInt(b.new_posts)} new posts; {formatInt(scored)} reached 48h: {b.scored.above} above, {b.scored.as_expected}{" "}
+        as expected, {b.scored.below} below
+      </BriefingLine>
+      {b.notable.slice(0, 5).map((n) => (
+        <div key={n.post} className="flex flex-col">
+          <span className="text-[13px] leading-[1.45] text-text">
+            <RecordLink id={n.post} /> {NOTABLE_TEXT[n.label]}: ~{formatInt(n.outcome_i48)} vs median{" "}
+            {formatInt(n.expected_median)}
+          </span>
+          <span className="truncate text-xs leading-[1.45] text-faint">“{n.text}”</span>
+        </div>
+      ))}
+      {b.regimes_opened.length > 0 && (
+        <BriefingLine>X ranker parameters changed ({b.regimes_opened.join(", ")}); a new regime is open</BriefingLine>
+      )}
+      {b.near_duplicates.length > 0 && (
+        <BriefingLine>
+          {b.near_duplicates.length} new {b.near_duplicates.length === 1 ? "post looks" : "posts look"} like near-duplicates
+          of earlier ones
+        </BriefingLine>
+      )}
+      {(b.planned.matched > 0 || b.planned.missed > 0) && (
+        <BriefingLine>
+          Planned posts: {b.planned.matched} published, {b.planned.missed} missed
+        </BriefingLine>
+      )}
+      {b.late_maturity > 0 && (
+        <BriefingLine>{b.late_maturity} posts were first captured after 48h and are flagged late</BriefingLine>
+      )}
+    </>
+  );
+}
+
+function PlannedSection({ slots, tz, onRegister }: { slots: PlannedSlot[] | undefined; tz: string; onRegister: () => void }) {
+  const now = useNow(60_000);
+  const upcoming = (slots ?? []).filter((s) => s.state === "planned" && Date.parse(s.planned_at) > now);
+  return (
+    <section aria-label="Planned posts" className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <BriefingHeading>Planned posts</BriefingHeading>
+        <Button label="Register post" icon="ActionAdd" variant="ghost" onClick={onRegister} className="h-6 w-fit" />
+      </div>
+      {upcoming.length === 0 ? (
+        <span className="text-xs leading-[1.45] text-faint">
+          None upcoming. Register one to freeze its forecast before you post.
+        </span>
+      ) : (
+        <ul className="flex flex-col">
+          {upcoming.map((s) => (
+            <li key={s.slot} className="flex items-baseline gap-2 py-0.5" title={s.text ?? undefined}>
+              <span className="shrink-0 font-mono text-xs leading-[1.45] whitespace-nowrap text-text">
+                {formatDateTime(s.planned_at, tz)}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-xs leading-[1.45] text-muted">
+                {s.text ?? POST_TYPE_TEXT[s.post_type] ?? formatLabel(s.post_type)}
+              </span>
+              <span className="font-mono text-[11px] leading-[1.45] whitespace-nowrap text-faint">
+                {s.forecast_q50 != null
+                  ? `${formatCompact(s.forecast_q10)}–${formatCompact(s.forecast_q90)} · med ${formatCompact(s.forecast_q50)}`
+                  : s.slot}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function BriefingPanel({ ov, tz, onRegister }: { ov: OverviewResponse; tz: string; onRegister: () => void }) {
+  const briefing = useBriefing();
+  const schedule = useSchedule();
+  const b = briefing.data?.briefing ?? null;
+  const spend = ov.spend;
+  const notes = [...(b?.caveats ?? []), ...(briefing.data?.caveats ?? [])];
+  const badge = briefing.data ? CONFIDENCE_BADGE[briefing.data.confidence] : null;
+  const nextDue = b ? new Date(Date.parse(b.cutoff_at) + 24 * 3600 * 1000).toISOString() : null;
+  return (
+    <section aria-label="Last briefing" className="flex w-[400px] shrink-0 flex-col">
       <div className="flex h-10 items-center border-b border-rule pr-4">
         <PanelHeader
-          title="Last run"
-          subtitle={run?.finished_at ? `finished ${formatDateTime(run.finished_at, tz)}` : run ? run.status : "no run yet"}
+          title="Last briefing"
+          subtitle={b ? `run ${b.run_id} · ${formatDateTime(b.cutoff_at, tz)}` : "no run yet"}
           showAction={false}
           className="flex-1"
         />
-        <Badge label="Briefing in M1" tone="default" />
+        {badge && <Badge label={badge.label} tone={badge.tone} />}
       </div>
       <div className="flex flex-col gap-4 px-4 py-3">
-        <div className="flex flex-col gap-1.5">
+        <section aria-label="What happened" className="flex flex-col gap-1.5">
           <BriefingHeading>What happened</BriefingHeading>
-          {run ? (
-            <>
-              <BriefingLine>
-                Run {run.id.replace(/^run:/, "")} {run.status}
-                {run.gap_since_prev_h != null ? `, ${formatDecimal(run.gap_since_prev_h)}h after the previous one` : ""}
-              </BriefingLine>
-              <BriefingLine>
-                {ov.status_7d.above + ov.status_7d.as_expected + ov.status_7d.below} of the last 7 days’ posts matured:{" "}
-                {ov.status_7d.above} above, {ov.status_7d.as_expected} as, {ov.status_7d.below} below expected
-              </BriefingLine>
-            </>
+          {briefing.isPending ? (
+            <span className="text-xs leading-[1.45] text-faint">Loading the briefing…</span>
+          ) : briefing.isError ? (
+            <span className="text-xs leading-[1.45] text-negative">Can’t load the briefing ({briefing.error.message}).</span>
           ) : (
-            <BriefingLine>No run yet.</BriefingLine>
+            <WhatHappened briefing={briefing.data} />
           )}
-        </div>
-        <div className="flex flex-col gap-2">
+        </section>
+        <PlannedSection slots={schedule.data?.slots} tz={tz} onRegister={onRegister} />
+        <section aria-label="Spend" className="flex flex-col gap-2">
           <BriefingHeading>Spend</BriefingHeading>
           <Meter
             label={`X API, ${spend.month_label}`}
@@ -473,12 +676,25 @@ function RunPanel({ ov, tz }: { ov: OverviewResponse; tz: string }) {
             fill={spend.spent_usd >= spend.cap_usd ? "negative" : "neutral"}
             className="w-full"
           />
-          {run && <span className="text-xs leading-[1.45] text-muted">Last run cost {formatUsd(run.spend_usd)}.</span>}
-        </div>
-        <p className="text-xs leading-[1.45] text-faint">
-          Briefings arrive in <span className="font-mono text-muted">M1</span>: each run will write what happened, what is
-          on track and what needs a decision.
-        </p>
+          {b?.spend && (
+            <span className="text-xs leading-[1.45] text-muted">This run cost ${b.spend.run_usd.toFixed(3)}.</span>
+          )}
+        </section>
+        {notes.length > 0 && (
+          <section aria-label="Notes" className="flex flex-col gap-1.5">
+            <BriefingHeading>Notes</BriefingHeading>
+            {notes.map((note) => (
+              <span key={note} className="text-xs leading-[1.45] text-faint">
+                {note}
+              </span>
+            ))}
+          </section>
+        )}
+        {nextDue && (
+          <span className="text-xs leading-[1.45] text-muted">
+            Next run due {formatDateTime(nextDue, tz)}. Runs about once a day keep every post’s 48h capture on time.
+          </span>
+        )}
       </div>
     </section>
   );
@@ -490,10 +706,12 @@ interface Step {
   title: string;
   body: string;
   done: boolean;
-  action?: { label: string; primary?: boolean; title: string };
+  action?: { label: string; primary?: boolean; title: string; onClick?: () => void; disabled?: boolean };
 }
 
-function DayZero({ ov }: { ov: OverviewResponse }) {
+function DayZero({ ov, tz, run, onRegister }: BodyProps) {
+  const schedule = useSchedule();
+  const planned = (schedule.data?.slots ?? []).length > 0;
   const steps: Step[] = [
     {
       title: "Connect your X account",
@@ -504,19 +722,25 @@ function DayZero({ ov }: { ov: OverviewResponse }) {
       title: "Run for the first time",
       body: "Collects your profile and sets the follower baseline. About 1 minute.",
       done: ov.last_run != null,
-      action: { label: "Start run", primary: true, title: RUN_FROM_CLI },
+      action: {
+        label: run.running ? "Running…" : "Start run",
+        primary: true,
+        title: START_RUN_TITLE,
+        onClick: run.start,
+        disabled: run.running,
+      },
     },
     {
       title: "Set a goal",
       body: "There is no default goal without peers. Goal status reads “no goal set” until you add one.",
       done: false,
-      action: { label: "Set goal", title: "Goals arrive in M3" },
+      action: { label: "Set goal", title: "Goals arrive in M3", disabled: true },
     },
     {
       title: "Register your first planned posts",
       body: "Each gets a forecast frozen before it goes out. Agents can do this too.",
-      done: false,
-      action: { label: "Register post", title: "Planned posts arrive with register_planned_post (M1)" },
+      done: planned,
+      action: { label: "Register post", title: "Register a planned post and freeze its forecast", onClick: onRegister },
     },
   ];
   const next = steps.findIndex((s) => !s.done);
@@ -557,14 +781,22 @@ function DayZero({ ov }: { ov: OverviewResponse }) {
                   label={step.action.label}
                   showIcon={false}
                   variant={step.action.primary && i === next ? "primary" : "secondary"}
-                  disabled
+                  disabled={step.action.disabled}
                   title={step.action.title}
+                  onClick={step.action.onClick}
                 />
               )}
             </li>
           ))}
         </ol>
       </section>
+      {run.running ? <RunProgress run={run} tz={tz} /> : <WhatToExpect />}
+    </div>
+  );
+}
+
+function WhatToExpect() {
+  return (
       <section aria-label="What to expect" className="flex w-[400px] shrink-0 flex-col">
         <div className="flex h-10 items-center border-b border-rule pr-4">
           <PanelHeader title="What to expect" subtitle="no peers in v1" showAction={false} className="flex-1" />
@@ -593,7 +825,6 @@ function DayZero({ ov }: { ov: OverviewResponse }) {
           ))}
         </div>
       </section>
-    </div>
   );
 }
 

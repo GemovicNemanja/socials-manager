@@ -1,4 +1,5 @@
 import { cx } from "../lib/cx";
+import { StatusPill, type StatusPillStatus } from "./StatusPill";
 
 /** "none" is a code-only reading for a KPI without a forecast yet: the track alone. */
 export type ExpectationTileReading = "default" | "above" | "below" | "plan" | "none";
@@ -15,6 +16,8 @@ export interface ExpectationTileProps {
    * Defaults to the canvas tick spot for the reading.
    */
   position?: number;
+  /** Verbal outcome against the range ("Above expected"), shown beside the percentile with the range on its own line. */
+  outcome?: { label: string; status: StatusPillStatus };
   className?: string;
 }
 
@@ -43,6 +46,7 @@ export function ExpectationTile({
   range = "exp. +38 to +74",
   reading = "default",
   position,
+  outcome,
   className,
 }: ExpectationTileProps) {
   const tick = tickByReading[reading];
@@ -63,10 +67,20 @@ export function ExpectationTile({
         {reading === "plan" && <div className="absolute top-[3px] left-0 h-0.5 bg-neutral" style={{ width: pct }} />}
         {tick && <div className={cx("absolute top-0 h-2 w-0.5", tick.colour)} style={{ left: pct }} />}
       </div>
-      <div className="flex min-w-0 gap-1.5">
-        <span className={cx("font-mono text-[11px] leading-normal", percentileColour[reading])}>{percentile}</span>
-        <span className="truncate text-[11px] leading-normal text-faint">{range}</span>
-      </div>
+      {outcome ? (
+        <>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className={cx("font-mono text-[11px] leading-normal", percentileColour[reading])}>{percentile}</span>
+            <StatusPill label={outcome.label} status={outcome.status} className="h-4 min-w-0" />
+          </div>
+          <span className="truncate text-[11px] leading-normal text-faint">{range}</span>
+        </>
+      ) : (
+        <div className="flex min-w-0 gap-1.5">
+          <span className={cx("font-mono text-[11px] leading-normal", percentileColour[reading])}>{percentile}</span>
+          <span className="truncate text-[11px] leading-normal text-faint">{range}</span>
+        </div>
+      )}
     </div>
   );
 }

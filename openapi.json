@@ -191,10 +191,447 @@
           }
         }
       }
+    },
+    "/api/briefing": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Briefing",
+        "description": "The latest run's briefing: summary lines, notable posts with record ids, caveats, spend.",
+        "operationId": "briefing_api_briefing_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefingOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/status": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Run Status",
+        "description": "The latest run and any unfinished run, step by step, with a classified failure if any.",
+        "operationId": "run_status_api_runs_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Start Run",
+        "description": "Run now, or resume an interrupted run, and return the new briefing.\n\nBlocks until the run ends (seconds to a minute). It runs in the server's thread pool, so it\nfinishes even if the browser goes away; poll ``GET /api/runs/status`` meanwhile. If another\nrun holds the lock, returns at once and the status shows that run.",
+        "operationId": "start_run_api_runs_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStartOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/planned": {
+      "get": {
+        "tags": [
+          "planned"
+        ],
+        "summary": "Schedule",
+        "description": "Planned posts: upcoming ones with their frozen ranges, and recent ones (posted or missed).",
+        "operationId": "schedule_api_planned_get",
+        "parameters": [
+          {
+            "name": "include_past_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 90,
+              "minimum": 0,
+              "default": 7,
+              "title": "Include Past Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "planned"
+        ],
+        "summary": "Register",
+        "description": "Register a planned post and freeze its forecast now, before the post exists.",
+        "operationId": "register_api_planned_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/planned/draft": {
+      "post": {
+        "tags": [
+          "planned"
+        ],
+        "summary": "Draft",
+        "description": "The forecast a planned post would get, with guardrail warnings. Freezes nothing.",
+        "operationId": "draft_api_planned_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No owner account yet: run once first"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "BriefingData": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "cutoff_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Cutoff At"
+          },
+          "gap_since_prev_h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Since Prev H"
+          },
+          "new_posts": {
+            "type": "integer",
+            "title": "New Posts",
+            "default": 0
+          },
+          "scored": {
+            "$ref": "#/components/schemas/ScoredCounts"
+          },
+          "notable": {
+            "items": {
+              "$ref": "#/components/schemas/NotablePost"
+            },
+            "type": "array",
+            "title": "Notable"
+          },
+          "late_maturity": {
+            "type": "integer",
+            "title": "Late Maturity",
+            "default": 0
+          },
+          "regimes_opened": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Regimes Opened"
+          },
+          "near_duplicates": {
+            "items": {
+              "$ref": "#/components/schemas/NearDuplicate"
+            },
+            "type": "array",
+            "title": "Near Duplicates"
+          },
+          "planned": {
+            "$ref": "#/components/schemas/PlannedMatches"
+          },
+          "upcoming": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingSlot"
+            },
+            "type": "array",
+            "title": "Upcoming"
+          },
+          "curve_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Version"
+          },
+          "spend": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefingSpend"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "cutoff_at",
+          "gap_since_prev_h",
+          "new_posts",
+          "scored",
+          "notable",
+          "late_maturity",
+          "regimes_opened",
+          "near_duplicates",
+          "planned",
+          "upcoming",
+          "curve_version",
+          "spend",
+          "caveats"
+        ],
+        "title": "BriefingData",
+        "description": "The structured part of a run briefing (services/briefing.py ``build``)."
+      },
+      "BriefingOut": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "suggestive",
+              "too early"
+            ],
+            "title": "Confidence"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "regime_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Id"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "briefing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefingData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "confidence",
+          "as_of",
+          "model_version",
+          "regime_id",
+          "data_sufficiency",
+          "run_id",
+          "lines",
+          "briefing"
+        ],
+        "title": "BriefingOut"
+      },
+      "BriefingSpend": {
+        "properties": {
+          "run_usd": {
+            "type": "number",
+            "title": "Run Usd"
+          },
+          "month_usd": {
+            "type": "number",
+            "title": "Month Usd"
+          },
+          "cap_usd": {
+            "type": "number",
+            "title": "Cap Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_usd",
+          "month_usd",
+          "cap_usd"
+        ],
+        "title": "BriefingSpend"
+      },
       "Calibration": {
         "properties": {
           "n": {
@@ -483,6 +920,171 @@
         ],
         "title": "ForecastDetail"
       },
+      "ForecastOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "frozen": {
+            "type": "boolean",
+            "title": "Frozen"
+          },
+          "quantiles": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Quantiles"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "curve_version": {
+            "type": "string",
+            "title": "Curve Version"
+          },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
+          "frozen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frozen At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "subject",
+          "kind",
+          "frozen",
+          "quantiles",
+          "model_version",
+          "curve_version"
+        ],
+        "title": "ForecastOut"
+      },
+      "ForecastResponse": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "suggestive",
+              "too early"
+            ],
+            "title": "Confidence"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "regime_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Id"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForecastOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guardrails": {
+            "items": {
+              "$ref": "#/components/schemas/GuardrailHit"
+            },
+            "type": "array",
+            "title": "Guardrails"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "confidence",
+          "as_of",
+          "model_version",
+          "regime_id",
+          "data_sufficiency",
+          "forecast"
+        ],
+        "title": "ForecastResponse"
+      },
       "ForecastSummary": {
         "properties": {
           "q10": {
@@ -516,6 +1118,40 @@
           "kind"
         ],
         "title": "ForecastSummary"
+      },
+      "GuardrailHit": {
+        "properties": {
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule",
+          "severity",
+          "detail"
+        ],
+        "title": "GuardrailHit"
       },
       "HTTPValidationError": {
         "properties": {
@@ -607,6 +1243,67 @@
           "expected"
         ],
         "title": "Kpi"
+      },
+      "NearDuplicate": {
+        "properties": {
+          "post": {
+            "type": "string",
+            "title": "Post"
+          },
+          "matches": {
+            "type": "string",
+            "title": "Matches"
+          },
+          "similarity": {
+            "type": "number",
+            "title": "Similarity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "post",
+          "matches",
+          "similarity"
+        ],
+        "title": "NearDuplicate"
+      },
+      "NotablePost": {
+        "properties": {
+          "post": {
+            "type": "string",
+            "title": "Post"
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "above",
+              "as_expected",
+              "below"
+            ],
+            "title": "Label"
+          },
+          "outcome_i48": {
+            "type": "number",
+            "title": "Outcome I48"
+          },
+          "expected_median": {
+            "type": "number",
+            "title": "Expected Median"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "post",
+          "label",
+          "outcome_i48",
+          "expected_median",
+          "text"
+        ],
+        "title": "NotablePost"
       },
       "Overview": {
         "properties": {
@@ -859,11 +1556,9 @@
           "area": {
             "type": "string",
             "enum": [
-              "briefing",
               "follower_forecast",
               "model_health",
-              "goals",
-              "planned_posts"
+              "goals"
             ],
             "title": "Area"
           },
@@ -883,6 +1578,215 @@
           "reason"
         ],
         "title": "PendingAreaInfo"
+      },
+      "PlanIn": {
+        "properties": {
+          "planned_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Planned At"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "post_type": {
+            "type": "string",
+            "enum": [
+              "original",
+              "quote",
+              "reply",
+              "repost",
+              "self_reply"
+            ],
+            "title": "Post Type",
+            "default": "original"
+          },
+          "post_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "Text",
+                  "Image",
+                  "Video",
+                  "Text + link",
+                  "Thread",
+                  "Poll"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Format"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ai",
+                  "software_development",
+                  "science_technology",
+                  "career",
+                  "personal",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "has_link": {
+            "type": "boolean",
+            "title": "Has Link",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "planned_at"
+        ],
+        "title": "PlanIn",
+        "description": "A post the member intends to publish. ``planned_at`` needs an offset; it is stored in UTC."
+      },
+      "PlannedMatches": {
+        "properties": {
+          "matched": {
+            "type": "integer",
+            "title": "Matched",
+            "default": 0
+          },
+          "missed": {
+            "type": "integer",
+            "title": "Missed",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "matched",
+          "missed"
+        ],
+        "title": "PlannedMatches"
+      },
+      "PlannedResponse": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "suggestive",
+              "too early"
+            ],
+            "title": "Confidence"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "regime_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Id"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForecastOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guardrails": {
+            "items": {
+              "$ref": "#/components/schemas/GuardrailHit"
+            },
+            "type": "array",
+            "title": "Guardrails"
+          },
+          "registered": {
+            "type": "boolean",
+            "title": "Registered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "confidence",
+          "as_of",
+          "model_version",
+          "regime_id",
+          "data_sufficiency",
+          "slot",
+          "forecast",
+          "registered"
+        ],
+        "title": "PlannedResponse"
       },
       "PostDetail": {
         "properties": {
@@ -1359,6 +2263,432 @@
         ],
         "title": "RatioKpi"
       },
+      "RegisterIn": {
+        "properties": {
+          "planned_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Planned At"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "post_type": {
+            "type": "string",
+            "enum": [
+              "original",
+              "quote",
+              "reply",
+              "repost",
+              "self_reply"
+            ],
+            "title": "Post Type",
+            "default": "original"
+          },
+          "post_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "Text",
+                  "Image",
+                  "Video",
+                  "Text + link",
+                  "Thread",
+                  "Poll"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Format"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ai",
+                  "software_development",
+                  "science_technology",
+                  "career",
+                  "personal",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "has_link": {
+            "type": "boolean",
+            "title": "Has Link",
+            "default": false
+          },
+          "accept_warnings": {
+            "type": "boolean",
+            "title": "Accept Warnings",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "planned_at"
+        ],
+        "title": "RegisterIn"
+      },
+      "RunFailure": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reauth",
+              "x_unavailable",
+              "interrupted",
+              "other"
+            ],
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "step",
+          "kind",
+          "title",
+          "detail",
+          "command"
+        ],
+        "title": "RunFailure"
+      },
+      "RunStartOut": {
+        "properties": {
+          "briefing": {
+            "$ref": "#/components/schemas/BriefingOut"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "briefing",
+          "status"
+        ],
+        "title": "RunStartOut"
+      },
+      "RunStatus": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "trigger": {
+            "type": "string",
+            "title": "Trigger"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "cutoff_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Cutoff At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "spend_usd": {
+            "type": "number",
+            "title": "Spend Usd"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepStatus"
+            },
+            "type": "array",
+            "title": "Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "trigger",
+          "started_at",
+          "cutoff_at",
+          "finished_at",
+          "spend_usd",
+          "steps"
+        ],
+        "title": "RunStatus"
+      },
+      "RunStatusOut": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "suggestive",
+              "too early"
+            ],
+            "title": "Confidence"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "regime_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Id"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unfinished": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "step_summaries": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Step Summaries"
+          },
+          "step_details": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Step Details"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "confidence",
+          "as_of",
+          "model_version",
+          "regime_id",
+          "data_sufficiency",
+          "latest",
+          "unfinished",
+          "active",
+          "step_summaries",
+          "step_details",
+          "failure"
+        ],
+        "title": "RunStatusOut"
+      },
+      "ScheduleResponse": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "suggestive",
+              "too early"
+            ],
+            "title": "Confidence"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "regime_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Id"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotOut"
+            },
+            "type": "array",
+            "title": "Slots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "confidence",
+          "as_of",
+          "model_version",
+          "regime_id",
+          "data_sufficiency",
+          "slots"
+        ],
+        "title": "ScheduleResponse"
+      },
       "ScoreDetail": {
         "properties": {
           "outcome": {
@@ -1422,6 +2752,32 @@
           "scored_at"
         ],
         "title": "ScoreDetail"
+      },
+      "ScoredCounts": {
+        "properties": {
+          "above": {
+            "type": "integer",
+            "title": "Above",
+            "default": 0
+          },
+          "as_expected": {
+            "type": "integer",
+            "title": "As Expected",
+            "default": 0
+          },
+          "below": {
+            "type": "integer",
+            "title": "Below",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "above",
+          "as_expected",
+          "below"
+        ],
+        "title": "ScoredCounts"
       },
       "Shell": {
         "properties": {
@@ -1580,6 +2936,95 @@
           "cap_usd"
         ],
         "title": "ShellSpend"
+      },
+      "SlotOut": {
+        "properties": {
+          "slot": {
+            "type": "string",
+            "title": "Slot"
+          },
+          "planned_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Planned At"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "post_type": {
+            "type": "string",
+            "title": "Post Type"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "matched_post": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Post"
+          },
+          "forecast_q10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Q10"
+          },
+          "forecast_q50": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Q50"
+          },
+          "forecast_q90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Q90"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot",
+          "planned_at",
+          "state",
+          "post_type",
+          "text",
+          "matched_post",
+          "forecast_q10",
+          "forecast_q50",
+          "forecast_q90"
+        ],
+        "title": "SlotOut"
       },
       "SnapshotPoint": {
         "properties": {
@@ -1741,6 +3186,54 @@
         },
         "type": "object",
         "title": "StatusCounts"
+      },
+      "StepStatus": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "StepStatus"
+      },
+      "UpcomingSlot": {
+        "properties": {
+          "slot": {
+            "type": "string",
+            "title": "Slot"
+          },
+          "planned_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Planned At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot",
+          "planned_at"
+        ],
+        "title": "UpcomingSlot"
       },
       "ValidationError": {
         "properties": {
