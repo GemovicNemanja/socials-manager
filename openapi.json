@@ -1,0 +1,647 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Social Manager",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shell": {
+      "get": {
+        "tags": [
+          "shell"
+        ],
+        "summary": "Shell",
+        "operationId": "shell_api_shell_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shell"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/posts": {
+      "get": {
+        "tags": [
+          "posts"
+        ],
+        "summary": "Posts",
+        "operationId": "posts_api_posts_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "above",
+                "as_expected",
+                "below",
+                "provisional",
+                "no_forecast"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostsPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DataSufficiency": {
+        "properties": {
+          "owner_n": {
+            "type": "integer",
+            "title": "Owner N"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "owner_n",
+          "reason"
+        ],
+        "title": "DataSufficiency"
+      },
+      "ForecastSummary": {
+        "properties": {
+          "q10": {
+            "type": "number",
+            "title": "Q10"
+          },
+          "q50": {
+            "type": "number",
+            "title": "Q50"
+          },
+          "q90": {
+            "type": "number",
+            "title": "Q90"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "live",
+              "as_of",
+              "treatment_blind",
+              "prior_only_uncalibrated"
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "q10",
+          "q50",
+          "q90",
+          "kind"
+        ],
+        "title": "ForecastSummary"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "I48": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "exact": {
+            "type": "boolean",
+            "title": "Exact"
+          },
+          "provisional": {
+            "type": "boolean",
+            "title": "Provisional"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "exact",
+          "provisional"
+        ],
+        "title": "I48"
+      },
+      "PostItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "original",
+              "quote",
+              "reply",
+              "repost",
+              "self_reply"
+            ],
+            "title": "Type"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "age_h": {
+            "type": "number",
+            "title": "Age H"
+          },
+          "i48": {
+            "$ref": "#/components/schemas/I48"
+          },
+          "likes_per_1k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Likes Per 1K"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForecastSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pit_mid": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pit Mid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "above",
+              "as_expected",
+              "below",
+              "provisional",
+              "no_forecast"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "external_id",
+          "created_at",
+          "text",
+          "type",
+          "format",
+          "topic",
+          "age_h",
+          "i48",
+          "likes_per_1k",
+          "forecast",
+          "pit_mid",
+          "status"
+        ],
+        "title": "PostItem"
+      },
+      "PostsPage": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "counts_by_status": {
+            "$ref": "#/components/schemas/StatusCounts"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PostItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "model_version",
+          "data_sufficiency",
+          "caveats",
+          "total",
+          "counts_by_status",
+          "items"
+        ],
+        "title": "PostsPage"
+      },
+      "Shell": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShellAccount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShellRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spend": {
+            "$ref": "#/components/schemas/ShellSpend"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/ShellCounts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account",
+          "last_run",
+          "spend",
+          "counts"
+        ],
+        "title": "Shell"
+      },
+      "ShellAccount": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "handle": {
+            "type": "string",
+            "title": "Handle"
+          },
+          "initials": {
+            "type": "string",
+            "title": "Initials"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform"
+          },
+          "platform_label": {
+            "type": "string",
+            "title": "Platform Label"
+          },
+          "tz": {
+            "type": "string",
+            "title": "Tz"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "handle",
+          "initials",
+          "platform",
+          "platform_label",
+          "tz"
+        ],
+        "title": "ShellAccount"
+      },
+      "ShellCounts": {
+        "properties": {
+          "posts": {
+            "type": "integer",
+            "title": "Posts"
+          },
+          "experiments_running": {
+            "type": "integer",
+            "title": "Experiments Running"
+          },
+          "approvals_pending": {
+            "type": "integer",
+            "title": "Approvals Pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "posts",
+          "experiments_running",
+          "approvals_pending"
+        ],
+        "title": "ShellCounts"
+      },
+      "ShellRun": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "finished",
+              "running",
+              "failed"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "finished_at",
+          "status"
+        ],
+        "title": "ShellRun"
+      },
+      "ShellSpend": {
+        "properties": {
+          "month_label": {
+            "type": "string",
+            "title": "Month Label"
+          },
+          "spent_usd": {
+            "type": "number",
+            "title": "Spent Usd"
+          },
+          "cap_usd": {
+            "type": "number",
+            "title": "Cap Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month_label",
+          "spent_usd",
+          "cap_usd"
+        ],
+        "title": "ShellSpend"
+      },
+      "StatusCounts": {
+        "properties": {
+          "above": {
+            "type": "integer",
+            "title": "Above",
+            "default": 0
+          },
+          "as_expected": {
+            "type": "integer",
+            "title": "As Expected",
+            "default": 0
+          },
+          "below": {
+            "type": "integer",
+            "title": "Below",
+            "default": 0
+          },
+          "provisional": {
+            "type": "integer",
+            "title": "Provisional",
+            "default": 0
+          },
+          "no_forecast": {
+            "type": "integer",
+            "title": "No Forecast",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "StatusCounts"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

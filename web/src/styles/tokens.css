@@ -1,0 +1,47 @@
+/*
+ * Design tokens from the Wonder canvas `dashboard/*` set (Designs page).
+ * Names mirror the canvas: dashboard/ground -> --dashboard-ground.
+ * Dark only. Change values here, never in components.
+ */
+:root {
+  /* Surfaces */
+  --dashboard-ground: #0d0f12;
+  --dashboard-raised: #14171b;
+  --dashboard-surface: #1a1e23;
+  --dashboard-plot: #101317;
+
+  /* Lines */
+  --dashboard-grid: #1c2025;
+  --dashboard-rule: #252a30;
+  --dashboard-rule-strong: #323941;
+
+  /* Text */
+  --dashboard-text: #e6e9ed;
+  --dashboard-neutral: #cfd5dc;
+  --dashboard-muted: #a3abb5;
+  --dashboard-faint: #848c97;
+
+  /* Accent and forecast band */
+  --dashboard-accent: #7fa8ff;
+  --dashboard-accent-subtle: #162238;
+  --dashboard-band: #27416b;
+
+  /* States */
+  --dashboard-positive: #5ccf95;
+  --dashboard-positive-subtle: #12291f;
+  --dashboard-negative: #ef7d7d;
+  --dashboard-negative-subtle: #2e1819;
+  --dashboard-warn: #e2b55a;
+  --dashboard-warn-subtle: #2b2414;
+
+  /* Heat scale (heat-3 aliases band on the canvas) */
+  --dashboard-heat-1: #16202f;
+  --dashboard-heat-2: #1d2d47;
+  --dashboard-heat-3: var(--dashboard-band);
+  --dashboard-heat-4: #3a5d96;
+  --dashboard-heat-5: #5f86c9;
+
+  /* Type */
+  --dashboard-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --dashboard-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
