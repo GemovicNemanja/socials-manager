@@ -43,7 +43,12 @@ class FittedTrailingMedian:
         )
         sd = math.hypot(self.level_sd, self.noise_sd)
         samples = np.exp(rng.normal(log_mu, sd, N_DRAWS))
-        return PredictiveDraws(metric="impressions", horizon_h=48.0, samples=samples)
+        return PredictiveDraws(
+            metric="impressions",
+            horizon_h=48.0,
+            samples=samples,
+            meta={"uses_owner_data": "true" if self.f_ref > 0 else "false"},
+        )
 
 
 class TrailingMedianModel:

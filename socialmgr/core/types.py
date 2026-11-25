@@ -80,12 +80,21 @@ class CollectionRequest(Frozen):
     until: datetime
 
 
+class BillableRead(Frozen):
+    resource: str  # e.g. "post:<id>", "user:<id>", "follower:<id>"
+    unit_cost_usd: float
+
+
 class CollectionBatch(Frozen):
     provider: str
     accounts: tuple[FetchedAccount, ...] = ()
     posts: tuple[FetchedPost, ...] = ()
     metrics: tuple[FetchedMetrics, ...] = ()
-    cost_usd: float = 0.0
+    cost_usd: float = 0.0  # used when the provider doesn't list billable reads
+    # Billable resources read. When given, the collector bills each once per provider per UTC day,
+    # matching X's deduplication of Owned Reads, so a resumed or repeated run isn't billed twice.
+    billable: tuple["BillableRead", ...] = ()
+    caveats: tuple[str, ...] = ()
 
 
 class Distribution(Frozen):
@@ -141,3 +150,18 @@ class PredictiveDraws:
 
     def quantile(self, q: float) -> float:
         return float(np.quantile(self.samples, q))
+
+
+class LabelInput(Frozen):
+    """One post (or planned draft) to label. ``key`` is echoed back so results can be matched."""
+
+    key: str
+    text: str
+    post_type: PostType = "original"
+    format: str | None = None
+
+
+class LabelResult(Frozen):
+    key: str
+    values: dict[str, str]  # field -> value, only fields in the label set
+    confidence: float | None = None

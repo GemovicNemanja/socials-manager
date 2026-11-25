@@ -1,10 +1,11 @@
-"""The data path of a run: collect, freeze as-of forecasts, score matured posts.
+"""The data path of a run: collect, freeze forecasts, score matured posts, refit the maturity curve.
 
-M1 wraps these functions as resumable run steps. They are written so that a forecast only ever
-reads information available at the end of the last run before its post (MODEL.md §1.3).
+The run orchestrator (``services/runs.py``) calls these as resumable steps. They are written so that
+a forecast only ever reads information available at the end of the last run before its post
+(MODEL.md §1.3), and every forecast can be recomputed bit-for-bit from its stored manifest.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,20 +27,25 @@ from socialmgr.db.models import (
     FollowerSnapshot,
     Forecast,
     Label,
+    MaturityCurve,
     MetricSnapshot,
     ModelVersion,
+    PlannedSlot,
     Post,
+    Regime,
+    ResourceRead,
     Run,
     ScoreRow,
 )
+from socialmgr.labelling.taxonomy import SOURCE_PRECEDENCE
 from socialmgr.modelling import maturity, scoring
 from socialmgr.services import draws
 from socialmgr.services.hashing import sha256_json, sha256_text
 from socialmgr.services.plugins import ActivePlugins
 
-FEATURE_SET_VERSION = "fs-0"
-LABEL_SET_VERSION = "provider-hints-0"
-CODE_VERSION = "m0"
+FEATURE_SET_VERSION = "fs-1"
+LABEL_SET_VERSION_PROVIDER = "provider-hints-0"
+CODE_VERSION = "m1"
 OWNER_TERMS_MIN_POSTS = 20  # MODEL §2a minimum owner posts before owner-level terms (A22)
 LATE_MATURITY = timedelta(days=14)
 QUANTILES = (0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)
@@ -106,14 +112,31 @@ def start_run(session: Session, settings: Settings, trigger: str, cutoff: dateti
     return run
 
 
+def run_spend(session: Session, run_id: int) -> float:
+    return float(
+        session.scalar(select(func.coalesce(func.sum(Cost.amount_usd), 0.0)).where(Cost.run_id == run_id))
+        or 0.0
+    )
+
+
 def finish_run(session: Session, run: Run, now: datetime) -> None:
     run.finished_at = now
     run.status = "finished"
-    run.spend_usd = float(
-        session.scalar(select(func.coalesce(func.sum(Cost.amount_usd), 0.0)).where(Cost.run_id == run.id))
+    run.spend_usd = run_spend(session, run.id)
+    session.flush()
+
+
+def month_spend(session: Session, workspace_id: int, at: datetime) -> float:
+    """Spend in the UTC calendar month containing ``at``."""
+    start = at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return float(
+        session.scalar(
+            select(func.coalesce(func.sum(Cost.amount_usd), 0.0)).where(
+                Cost.workspace_id == workspace_id, Cost.incurred_at >= start, Cost.incurred_at <= at
+            )
+        )
         or 0.0
     )
-    session.flush()
 
 
 # ---------------------------------------------------------------- collection
@@ -124,6 +147,8 @@ class CollectSummary:
     new_posts: int
     snapshots: int
     cost_usd: float
+    caveats: tuple[str, ...] = ()
+    skipped: bool = False
 
 
 def _followers_before(session: Session, account_id: int, t: datetime) -> int | None:
@@ -136,13 +161,58 @@ def _followers_before(session: Session, account_id: int, t: datetime) -> int | N
     )
 
 
+def _bill(
+    session: Session, settings: Settings, run: Run, provider: str, batch_cost: float, billable: Any
+) -> float:
+    """Charge each billable read once per provider per UTC day (X deduplicates Owned Reads daily)."""
+    if not billable:
+        return batch_cost
+    day = run.cutoff_at.astimezone(UTC).date().isoformat()
+    seen = set(
+        session.scalars(
+            select(ResourceRead.resource).where(
+                ResourceRead.provider == provider, ResourceRead.utc_day == day
+            )
+        )
+    )
+    cost = 0.0
+    for read in billable:
+        if read.resource in seen:
+            continue
+        seen.add(read.resource)
+        session.add(
+            ResourceRead(
+                workspace_id=settings.workspace_id,
+                provider=provider,
+                resource=read.resource,
+                utc_day=day,
+                run_id=run.id,
+            )
+        )
+        cost += read.unit_cost_usd
+    return cost
+
+
 def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: Run) -> CollectSummary:
+    spent = month_spend(session, settings.workspace_id, run.cutoff_at)
+    if spent >= settings.monthly_cap_usd:
+        return CollectSummary(
+            0,
+            0,
+            0.0,
+            caveats=(
+                f"Collection skipped: this month's spend ${spent:.2f} reached the "
+                f"${settings.monthly_cap_usd:.2f} cap (SOCIALMGR_MONTHLY_CAP_USD).",
+            ),
+            skipped=True,
+        )
     accounts = list(
         session.scalars(select(Account).where(Account.workspace_id == settings.workspace_id, Account.active))
     )
     prev = last_finished_run(session, settings.workspace_id, before=run.cutoff_at)
     new_posts = snapshots = 0
     cost = 0.0
+    caveats: list[str] = []
     follower_counts: dict[int, int] = {}
     for provider in plugins.providers:
         refs = tuple(
@@ -157,6 +227,7 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
         batch = provider.collect(
             CollectionRequest(accounts=refs, since=prev.cutoff_at if prev else None, until=run.cutoff_at)
         )
+        caveats += batch.caveats
         for fa in batch.accounts:
             acct = session.get(Account, fa.account_id)
             if acct is not None and acct.external_id is None:
@@ -196,7 +267,7 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
                         Label(
                             workspace_id=settings.workspace_id,
                             post_id=post.id,
-                            label_set_version=LABEL_SET_VERSION,
+                            label_set_version=LABEL_SET_VERSION_PROVIDER,
                             field=fld,
                             value=value,
                             source="provider",
@@ -234,19 +305,20 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
             )
             snapshots += 1
 
-        if batch.cost_usd:
+        charged = _bill(session, settings, run, batch.provider, batch.cost_usd, batch.billable)
+        if charged:
             session.add(
                 Cost(
                     workspace_id=settings.workspace_id,
                     run_id=run.id,
                     provider=batch.provider,
                     item="collection",
-                    amount_usd=batch.cost_usd,
+                    amount_usd=round(charged, 6),
                     simulated=batch.provider.startswith("fake"),
                     incurred_at=run.cutoff_at,
                 )
             )
-            cost += batch.cost_usd
+            cost += charged
 
     # Follower counts are written after new posts took their as-of count from earlier runs.
     for account_id, followers in follower_counts.items():
@@ -260,20 +332,131 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
             )
         )
     session.flush()
-    return CollectSummary(new_posts=new_posts, snapshots=snapshots, cost_usd=round(cost, 6))
+    return CollectSummary(
+        new_posts=new_posts, snapshots=snapshots, cost_usd=round(cost, 6), caveats=tuple(caveats)
+    )
+
+
+# ---------------------------------------------------------------- labels
+
+
+def effective_labels(session: Session, post_id: int) -> dict[str, str]:
+    """One value per field: owner over provider over LLM over rule; newest wins within a source."""
+    rows = session.execute(
+        select(Label.field, Label.value, Label.source, Label.created_at, Label.id).where(
+            Label.post_id == post_id
+        )
+    ).all()
+    best: dict[str, tuple[int, datetime, int, str]] = {}
+    for fld, value, source, created, label_id in rows:
+        key = (SOURCE_PRECEDENCE.get(source, 0), created, label_id, value)
+        if fld not in best or key > best[fld]:
+            best[fld] = key
+    return {fld: v[3] for fld, v in best.items()}
+
+
+# ---------------------------------------------------------------- maturity curves
+
+
+def curve_as_of(session: Session, workspace_id: int, cutoff: datetime | None) -> maturity.Curve:
+    """The newest curve fitted by a run that finished at or before ``cutoff``."""
+    if cutoff is None:
+        return maturity.PRIOR
+    row = session.scalar(
+        select(MaturityCurve)
+        .join(Run, Run.id == MaturityCurve.run_id)
+        .where(MaturityCurve.workspace_id == workspace_id, Run.cutoff_at <= cutoff)
+        .order_by(Run.cutoff_at.desc(), MaturityCurve.id.desc())
+        .limit(1)
+    )
+    return _curve_from_row(row) if row else maturity.PRIOR
+
+
+def load_curve(session: Session, version: str) -> maturity.Curve:
+    if version == maturity.PRIOR_CURVE_VERSION:
+        return maturity.PRIOR
+    row = session.scalar(select(MaturityCurve).where(MaturityCurve.version == version))
+    if row is None:
+        raise LookupError(f"unknown maturity curve version {version}")
+    return _curve_from_row(row)
+
+
+def _curve_from_row(row: MaturityCurve) -> maturity.Curve:
+    return maturity.Curve(
+        version=row.version,
+        scale_h=float(row.params["scale_h"]),
+        shape=float(row.params["shape"]),
+        kappa=row.params.get("kappa"),
+        n_pairs=row.n_pairs,
+    )
+
+
+def capture_pairs(session: Session, workspace_id: int, cutoff: datetime) -> list[maturity.CapturePair]:
+    """Consecutive capture pairs of owner posts fetched by ``cutoff``."""
+    rows = session.execute(
+        select(MetricSnapshot.post_id, MetricSnapshot.age_s, MetricSnapshot.impressions)
+        .join(Post, Post.id == MetricSnapshot.post_id)
+        .join(Account, Account.id == Post.account_id)
+        .where(
+            MetricSnapshot.workspace_id == workspace_id,
+            MetricSnapshot.fetched_at <= cutoff,
+            MetricSnapshot.impressions.is_not(None),
+            Account.role == "owner",
+        )
+        .order_by(MetricSnapshot.post_id, MetricSnapshot.age_s)
+    ).all()
+    by_post: dict[int, list[tuple[float, int]]] = {}
+    for post_id, age_s, impressions in rows:
+        if impressions is not None:
+            by_post.setdefault(post_id, []).append((age_s / 3600, int(impressions)))
+    pairs: list[maturity.CapturePair] = []
+    for captures in by_post.values():
+        pairs += maturity.pairs_from_captures(captures)
+    return pairs
+
+
+def fit_curve(session: Session, settings: Settings, run: Run, now: datetime) -> maturity.Curve:
+    """Refit the curve on every capture pair seen so far; record it for this run."""
+    curve = maturity.fit(capture_pairs(session, settings.workspace_id, run.cutoff_at))
+    if curve.version == maturity.PRIOR_CURVE_VERSION:
+        return curve
+    if session.scalar(select(MaturityCurve.id).where(MaturityCurve.version == curve.version)) is None:
+        session.add(
+            MaturityCurve(
+                workspace_id=settings.workspace_id,
+                version=curve.version,
+                family=maturity.FAMILY,
+                params=curve.params,
+                n_pairs=curve.n_pairs,
+                run_id=run.id,
+                fitted_at=now,
+            )
+        )
+        session.flush()
+    return curve
+
+
+# ---------------------------------------------------------------- regimes
+
+
+def regime_at(
+    session: Session, workspace_id: int, platform: str, t: datetime, known_by: datetime | None
+) -> int | None:
+    """The regime in force at ``t`` among those recorded by ``known_by``."""
+    q = select(Regime.id).where(
+        Regime.workspace_id == workspace_id, Regime.platform == platform, Regime.started_at <= t
+    )
+    if known_by is not None:
+        q = q.where(Regime.created_at <= known_by)
+    return session.scalar(q.order_by(Regime.started_at.desc(), Regime.id.desc()).limit(1))
 
 
 # ---------------------------------------------------------------- forecasts
 
 
-def _post_labels(session: Session, post_id: int) -> dict[str, str]:
-    rows = session.execute(
-        select(Label.field, Label.value).where(Label.post_id == post_id).order_by(Label.created_at)
-    ).all()
-    return {f: v for f, v in rows}
-
-
-def matured_examples(session: Session, workspace_id: int, cutoff: datetime) -> list[TrainingExample]:
+def matured_examples(
+    session: Session, workspace_id: int, cutoff: datetime, curve: maturity.Curve = maturity.PRIOR
+) -> list[TrainingExample]:
     """Outcomes visible at ``cutoff``: each post's first capture at age >= 48h fetched by then."""
     first_mature = (
         select(MetricSnapshot.post_id, func.min(MetricSnapshot.age_s).label("age_s"))
@@ -299,7 +482,7 @@ def matured_examples(session: Session, workspace_id: int, cutoff: datetime) -> l
     for post, role, impressions, age_s in rows:
         if impressions is None:
             continue
-        estimate = maturity.estimate_i48(impressions, age_s / 3600)
+        estimate = curve.estimate_i48(impressions, age_s / 3600)
         if estimate is None:
             continue
         examples.append(
@@ -315,7 +498,9 @@ def matured_examples(session: Session, workspace_id: int, cutoff: datetime) -> l
     return sorted(examples, key=lambda e: (e.created_at, e.post_external_id))
 
 
-def _model_version_row(session: Session, workspace_id: int, version: str, family: str, prior: str) -> None:
+def _model_version_row(
+    session: Session, workspace_id: int, version: str, family: str, prior: str, role: str
+) -> None:
     if session.scalar(select(ModelVersion.id).where(ModelVersion.version == version)) is None:
         session.add(
             ModelVersion(
@@ -325,60 +510,115 @@ def _model_version_row(session: Session, workspace_id: int, version: str, family
                 prior_source=prior,
                 feature_set_version=FEATURE_SET_VERSION,
                 code_version=CODE_VERSION,
-                role="champion",
+                role=role,
                 created_at=datetime.now(UTC),
             )
         )
 
 
-def build_manifest(session: Session, workspace_id: int, post: Post) -> dict[str, Any]:
-    """The as-of input manifest: everything the forecast may use, named by snapshot run."""
-    snapshot = last_finished_run(session, workspace_id, before=post.created_at)
+def _manifest(
+    session: Session,
+    workspace_id: int,
+    account_id: int,
+    platform: str,
+    snapshot: Run | None,
+    subject: dict[str, Any],
+) -> dict[str, Any]:
+    """Everything a forecast may use, named by snapshot run (MODEL §1.3)."""
     cutoff = snapshot.cutoff_at if snapshot else None
-    examples = matured_examples(session, workspace_id, cutoff) if cutoff else []
-    followers_at_snapshot = (
+    curve = curve_as_of(session, workspace_id, cutoff)
+    examples = matured_examples(session, workspace_id, cutoff, curve) if cutoff else []
+    followers = (
         session.scalar(
             select(FollowerSnapshot.followers).where(
-                FollowerSnapshot.run_id == snapshot.id, FollowerSnapshot.account_id == post.account_id
+                FollowerSnapshot.run_id == snapshot.id, FollowerSnapshot.account_id == account_id
             )
         )
         if snapshot
         else None
     )
-    labels = _post_labels(session, post.id)
+    created_at = datetime.fromisoformat(subject["created_at"])
     return {
         "snapshot_run_id": snapshot.id if snapshot else None,
         "cutoff": cutoff.isoformat() if cutoff else None,
         "feature_set_version": FEATURE_SET_VERSION,
-        "curve_version": maturity.PRIOR_CURVE_VERSION,
-        "subject": {
-            "subject_id": f"post:{post.id}",
-            "created_at": post.created_at.isoformat(),
-            "type": post.type,
-            "followers_at_post": followers_at_snapshot or 0,
-            "has_url": post.has_url,
-            "format": labels.get("format"),
-            "topic": labels.get("topic"),
-        },
+        "curve_version": curve.version,
+        "regime_id": regime_at(session, workspace_id, platform, created_at, cutoff),
+        "subject": {**subject, "followers_at_post": followers or 0},
         "training": [e.model_dump(mode="json") for e in examples],
         "seed": snapshot.id if snapshot else 0,
     }
 
 
+def build_manifest(session: Session, workspace_id: int, post: Post) -> dict[str, Any]:
+    """The as-of manifest of a published post: the last finished run before it was posted."""
+    snapshot = last_finished_run(session, workspace_id, before=post.created_at)
+    labels = effective_labels(session, post.id)
+    account = session.get(Account, post.account_id)
+    assert account is not None
+    return _manifest(
+        session,
+        workspace_id,
+        post.account_id,
+        account.platform,
+        snapshot,
+        {
+            "subject_id": f"post:{post.id}",
+            "created_at": post.created_at.isoformat(),
+            "type": post.type,
+            "has_url": post.has_url,
+            "format": labels.get("format"),
+            "topic": labels.get("topic"),
+            "own_posts_48h": post.own_posts_48h,
+            "gap_since_prev_min": post.gap_since_prev_min,
+        },
+    )
+
+
+def build_live_manifest(
+    session: Session, workspace_id: int, slot: PlannedSlot, now: datetime
+) -> dict[str, Any]:
+    """The live manifest of a planned post: the last finished run before registration."""
+    snapshot = last_finished_run(session, workspace_id, before=now)
+    account = session.get(Account, slot.account_id)
+    assert account is not None
+    labels = slot.labels or {}
+    return _manifest(
+        session,
+        workspace_id,
+        slot.account_id,
+        account.platform,
+        snapshot,
+        {
+            "subject_id": f"slot:{slot.id}",
+            "created_at": slot.planned_at.isoformat(),
+            "type": slot.post_type,
+            "has_url": bool(labels.get("has_url") == "true"),
+            "format": labels.get("format"),
+            "topic": labels.get("topic"),
+            "own_posts_48h": None,
+            "gap_since_prev_min": None,
+        },
+    )
+
+
 def forecast_from_manifest(
     plugins: ActivePlugins, manifest: dict[str, Any]
-) -> tuple[str, str, PredictiveDraws]:
-    """Recompute a forecast from its manifest alone. Returns (model_version, kind, draws)."""
+) -> tuple[str, bool, PredictiveDraws]:
+    """Recompute a forecast from its manifest alone. Returns (model_version, calibrated, draws).
+
+    ``calibrated`` is false while the model ran on priors only (MODEL A22: ``prior_only_uncalibrated``).
+    """
     training = [TrainingExample.model_validate(e) for e in manifest["training"]]
-    subject_raw = manifest["subject"]
+    raw = manifest["subject"]
     subject = ForecastSubject(
-        subject_id=subject_raw["subject_id"],
-        created_at=datetime.fromisoformat(subject_raw["created_at"]),
-        type=subject_raw["type"],
-        followers_at_post=subject_raw["followers_at_post"],
-        has_url=subject_raw["has_url"],
-        format=subject_raw["format"],
-        topic=subject_raw["topic"],
+        subject_id=raw["subject_id"],
+        created_at=datetime.fromisoformat(raw["created_at"]),
+        type=raw["type"],
+        followers_at_post=raw["followers_at_post"],
+        has_url=raw["has_url"],
+        format=raw["format"],
+        topic=raw["topic"],
     )
     owner_n = sum(1 for e in training if e.account_role == "owner")
     prior = plugins.prior_source.prior(
@@ -386,19 +626,68 @@ def forecast_from_manifest(
     )
     fitted = plugins.champion.fit(training, prior, seed=int(manifest["seed"]))
     predicted = fitted.predict(subject)
-    kind = "as_of" if owner_n >= OWNER_TERMS_MIN_POSTS else "prior_only_uncalibrated"
-    return fitted.version, kind, predicted
+    uses_owner = predicted.meta.get("uses_owner_data", "true") == "true"
+    calibrated = uses_owner and owner_n >= OWNER_TERMS_MIN_POSTS
+    return fitted.version, calibrated, predicted
+
+
+def freeze_forecast(
+    session: Session,
+    settings: Settings,
+    plugins: ActivePlugins,
+    subject: str,
+    kind: str,
+    manifest: dict[str, Any],
+    now: datetime,
+) -> Forecast:
+    """Compute and freeze one forecast. Frozen rows are never edited (append-only triggers)."""
+    version, calibrated, predicted = forecast_from_manifest(plugins, manifest)
+    if not calibrated and kind == "as_of":
+        kind = "prior_only_uncalibrated"
+    manifest = {**manifest, "model_version": version, "calibrated": calibrated}
+    digest = draws.store(session, predicted.samples, settings.workspace_id)
+    _model_version_row(
+        session,
+        settings.workspace_id,
+        version,
+        plugins.champion.family,
+        plugins.prior_source.name,
+        "champion",
+    )
+    forecast = Forecast(
+        workspace_id=settings.workspace_id,
+        subject=subject,
+        kind=kind,
+        model_version=version,
+        curve_version=manifest["curve_version"],
+        snapshot_run_id=manifest["snapshot_run_id"],
+        metric="impressions",
+        horizon_h=48.0,
+        quantiles={f"q{round(q * 100):02d}": predicted.quantile(q) for q in QUANTILES},
+        p_ge_goal=None,
+        input_manifest=manifest,
+        manifest_hash=sha256_json(manifest),
+        draws_hash=digest,
+        frozen_at=now,
+    )
+    session.add(forecast)
+    session.flush()
+    return forecast
 
 
 def freeze_as_of_forecasts(
     session: Session, settings: Settings, plugins: ActivePlugins, now: datetime
 ) -> int:
-    """Give every owner post without a forecast its as-of forecast. Forecasts are never edited."""
+    """Give every owner post without a forecast its as-of forecast."""
     owner = owner_account(session, settings.workspace_id)
     if owner is None:
         return 0
     frozen = set(
-        session.scalars(select(Forecast.subject).where(Forecast.workspace_id == settings.workspace_id))
+        session.scalars(
+            select(Forecast.subject).where(
+                Forecast.workspace_id == settings.workspace_id, Forecast.subject.like("post:%")
+            )
+        )
     )
     pending = [
         post
@@ -411,46 +700,41 @@ def freeze_as_of_forecasts(
     ]
     for post in pending:
         manifest = build_manifest(session, settings.workspace_id, post)
-        version, kind, predicted = forecast_from_manifest(plugins, manifest)
-        manifest = {**manifest, "model_version": version}
-        digest = draws.store(session, predicted.samples, settings.workspace_id)
-        _model_version_row(
-            session, settings.workspace_id, version, plugins.champion.family, plugins.prior_source.name
-        )
-        session.add(
-            Forecast(
-                workspace_id=settings.workspace_id,
-                subject=f"post:{post.id}",
-                kind=kind,
-                model_version=version,
-                curve_version=maturity.PRIOR_CURVE_VERSION,
-                snapshot_run_id=manifest["snapshot_run_id"],
-                metric="impressions",
-                horizon_h=48.0,
-                quantiles={f"q{round(q * 100):02d}": predicted.quantile(q) for q in QUANTILES},
-                p_ge_goal=None,
-                input_manifest=manifest,
-                manifest_hash=sha256_json(manifest),
-                draws_hash=digest,
-                frozen_at=now,
-            )
-        )
-    session.flush()
+        freeze_forecast(session, settings, plugins, f"post:{post.id}", "as_of", manifest, now)
     return len(pending)
 
 
 # ---------------------------------------------------------------- scoring
 
 
-def score_matured(session: Session, settings: Settings, run: Run, now: datetime) -> int:
-    """Score each unscored forecast once its post has a capture at age >= 48h."""
+@dataclass
+class ScoreSummary:
+    scored: int = 0
+    late_maturity: int = 0
+    labels: dict[str, int] = field(default_factory=dict)
+
+
+def subject_post_id(session: Session, subject: str) -> int | None:
+    """The published post a forecast subject refers to (a planned slot once it's matched)."""
+    kind, _, raw = subject.partition(":")
+    if kind == "post":
+        return int(raw)
+    if kind == "slot":
+        return session.scalar(select(PlannedSlot.matched_post_id).where(PlannedSlot.id == int(raw)))
+    return None
+
+
+def score_matured(session: Session, settings: Settings, run: Run, now: datetime) -> ScoreSummary:
+    """Score each unscored forecast once its post has a capture at age >= 48h (MODEL §1.3, §4.1)."""
+    summary = ScoreSummary()
     scored_ids = select(ScoreRow.forecast_id)
     forecasts = session.scalars(
         select(Forecast).where(Forecast.workspace_id == settings.workspace_id, Forecast.id.not_in(scored_ids))
     ).all()
-    count = 0
     for fc in forecasts:
-        post_id = int(fc.subject.split(":", 1)[1])
+        post_id = subject_post_id(session, fc.subject)
+        if post_id is None:
+            continue
         capture = session.scalar(
             select(MetricSnapshot)
             .where(
@@ -464,11 +748,13 @@ def score_matured(session: Session, settings: Settings, run: Run, now: datetime)
         if capture is None or capture.impressions is None:
             continue
         age_h = capture.age_s / 3600
-        outcome = maturity.estimate_i48(capture.impressions, age_h)
+        curve = load_curve(session, fc.curve_version)
+        outcome = curve.estimate_i48(capture.impressions, age_h)
         if outcome is None:
             continue
         samples = draws.load(session, fc.draws_hash)
         s = scoring.score(samples, outcome, seed=post_id)
+        late = age_h > LATE_MATURITY.total_seconds() / 3600
         session.add(
             ScoreRow(
                 workspace_id=settings.workspace_id,
@@ -478,7 +764,7 @@ def score_matured(session: Session, settings: Settings, run: Run, now: datetime)
                 capture_age_h=round(age_h, 3),
                 curve_version=fc.curve_version,
                 exact=False,
-                late_maturity=age_h > LATE_MATURITY.total_seconds() / 3600,
+                late_maturity=late,
                 pit_mid=s.pit_mid,
                 pit_rand=s.pit_rand,
                 crps_log=s.crps_log,
@@ -487,6 +773,9 @@ def score_matured(session: Session, settings: Settings, run: Run, now: datetime)
                 scored_at=now,
             )
         )
-        count += 1
+        summary.scored += 1
+        summary.late_maturity += int(late)
+        label = scoring.surprise_label(s.pit_mid)
+        summary.labels[label] = summary.labels.get(label, 0) + 1
     session.flush()
-    return count
+    return summary

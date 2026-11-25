@@ -15,8 +15,8 @@ def test_recompute_from_manifest(settings: Settings, loaded: sessionmaker[Sessio
     with loaded() as session:
         for fc in session.scalars(select(Forecast).order_by(Forecast.id)):
             assert sha256_json(fc.input_manifest) == fc.manifest_hash
-            version, kind, predicted = pipeline.forecast_from_manifest(plugins, fc.input_manifest)
-            assert version == fc.model_version and kind == fc.kind
+            version, calibrated, predicted = pipeline.forecast_from_manifest(plugins, fc.input_manifest)
+            assert version == fc.model_version and calibrated == fc.input_manifest["calibrated"]
             assert draws.encode(predicted.samples)[0] == fc.draws_hash
 
 
@@ -27,7 +27,7 @@ def test_manifest_ignores_later_data(loaded: sessionmaker[Session]) -> None:
             post = session.get(Post, int(fc.subject.split(":")[1]))
             assert post is not None
             rebuilt = pipeline.build_manifest(session, fc.workspace_id, post)
-            frozen = {k: v for k, v in fc.input_manifest.items() if k != "model_version"}
+            frozen = {k: v for k, v in fc.input_manifest.items() if k not in ("model_version", "calibrated")}
             assert rebuilt == frozen
             if frozen["cutoff"] is not None:
                 assert frozen["cutoff"] < post.created_at.isoformat()

@@ -16,7 +16,7 @@ FIXTURE_UNTIL = datetime(2026, 11, 25, 6, 0, tzinfo=UTC)
 
 
 def make_settings(tmp_path: Path, **overrides: object) -> Settings:
-    return Settings(_env_file=None, data_dir=tmp_path / "data", **overrides)  # type: ignore[call-arg]
+    return Settings(_env_file=None, data_dir=tmp_path / "data", **overrides)  # type: ignore[arg-type]
 
 
 @pytest.fixture

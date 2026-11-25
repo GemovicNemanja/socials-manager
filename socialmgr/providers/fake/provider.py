@@ -12,6 +12,7 @@ import numpy as np
 
 from socialmgr.core.types import (
     AccountRef,
+    BillableRead,
     Capability,
     CollectionBatch,
     CollectionRequest,
@@ -20,7 +21,7 @@ from socialmgr.core.types import (
     FetchedPost,
     PostType,
 )
-from socialmgr.modelling.maturity import prior_curve
+from socialmgr.modelling.maturity import PRIOR, Curve
 
 DEFAULT_START = datetime(2026, 10, 13, tzinfo=UTC)
 POST_HOURS = (7, 11, 16)  # UTC
@@ -118,13 +119,21 @@ class _FakeProvider:
     cost_per_post_read: float
     cost_per_user_read: float
 
-    def __init__(self, seed: int = 7, start: datetime = DEFAULT_START, growth_per_day: float = 9.6) -> None:
+    def __init__(
+        self,
+        seed: int = 7,
+        start: datetime = DEFAULT_START,
+        growth_per_day: float = 9.6,
+        curve: Curve = PRIOR,
+    ) -> None:
         self.seed = seed
         self.start = start
         self.growth = growth_per_day
+        self.curve = curve  # the true maturity curve the synthetic trajectories follow
 
     def collect(self, request: CollectionRequest) -> CollectionBatch:
         accounts, posts, metrics = [], [], []
+        billable: list[BillableRead] = []
         cost = 0.0
         for ref in request.accounts:
             if ref.role not in self.roles:
@@ -140,6 +149,9 @@ class _FakeProvider:
                 )
             )
             cost += self.cost_per_user_read
+            billable.append(
+                BillableRead(resource=f"user:{acct.external_id}", unit_cost_usd=self.cost_per_user_read)
+            )
             window_start = request.until - MAX_AGE
             for day in _days(max(window_start, self.start), request.until):
                 for post, i48 in acct.posts_on(day):
@@ -149,17 +161,23 @@ class _FakeProvider:
                         posts.append(post)
                     metrics.append(self._metrics(post, i48, request.until))
                     cost += self.cost_per_post_read
+                    billable.append(
+                        BillableRead(
+                            resource=f"post:{post.external_id}", unit_cost_usd=self.cost_per_post_read
+                        )
+                    )
         return CollectionBatch(
             provider=self.name,
             accounts=tuple(accounts),
             posts=tuple(posts),
             metrics=tuple(metrics),
             cost_usd=round(cost, 6),
+            billable=tuple(billable),
         )
 
     def _metrics(self, post: FetchedPost, i48: float, at: datetime) -> FetchedMetrics:
         age_h = (at - post.created_at).total_seconds() / 3600
-        impressions = round(i48 * prior_curve(age_h))
+        impressions = round(i48 * self.curve.g(age_h))
         rng = _rng(self.seed, post.external_id, "rates")
         like_rate, repost_rate, reply_rate, quote_rate, bm_rate, pc_rate = (
             rng.uniform(0.015, 0.035),

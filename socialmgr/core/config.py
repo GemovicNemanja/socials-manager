@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,8 +37,20 @@ class PluginConfig(BaseModel):
 
     providers: tuple[str, ...] = ("fake_owner",)
     prior_source: str = "hand_set"
-    champion_model: str = "trailing_median"
-    challenger_models: tuple[str, ...] = ()
+    champion_model: str = "nb2"
+    challenger_models: tuple[str, ...] = ("trailing_median",)
+    labeler: str = "claude_code"
+
+
+class RunConfig(BaseModel):
+    """What a run does besides collecting (IMPLEMENTATION_PLAN.md §6, "At each run")."""
+
+    model_config = ConfigDict(frozen=True)
+
+    regime_check: bool = True  # look for ranker changes in xai-org/x-algorithm's param.rs
+    backup: bool = True
+    backup_keep_daily: int = Field(default=14, ge=1)
+    backup_keep_weekly: int = Field(default=12, ge=0)
 
 
 class Settings(BaseSettings):
@@ -59,6 +71,8 @@ class Settings(BaseSettings):
     account: AccountConfig = AccountConfig()
     peers: tuple[PeerConfig, ...] = ()
     plugins: PluginConfig = PluginConfig()
+    run: RunConfig = RunConfig()
+    anthropic_api_key: SecretStr | None = None  # only for the anthropic_api labeller
 
     @property
     def db_path(self) -> Path:

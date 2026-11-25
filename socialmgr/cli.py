@@ -89,3 +89,85 @@ def openapi(out: Path = Path("openapi.json")) -> None:
 
     out.write_text(json.dumps(create_app(_settings(), web_dist=None).openapi(), indent=2) + "\n")
     typer.echo(f"Wrote {out}")
+
+
+@app.command()
+def run() -> None:
+    """Collect, label, forecast, score and write the briefing (resumes an interrupted run)."""
+    from socialmgr.modelling.regimes import github_fetcher
+    from socialmgr.services import briefing, runs
+    from socialmgr.services.plugins import load_plugins
+
+    settings = _settings()
+    engine = make_engine(settings)
+    migrate.upgrade(engine)
+    with session_factory(engine)() as session:
+        try:
+            outcomes = runs.run_now(
+                session, settings, load_plugins(settings), regime_fetcher=github_fetcher()
+            )
+        except (runs.RunInProgress, runs.StepFailed) as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        for outcome in outcomes:
+            if outcome.resumed:
+                typer.echo(f"Resumed run {outcome.run_id} (cutoff {outcome.cutoff_at:%Y-%m-%d %H:%M} UTC).")
+        latest = briefing.latest(session, settings.workspace_id)
+        if latest is not None:
+            typer.echo(latest.summary)
+
+
+@app.command()
+def plan(
+    at: Annotated[str, typer.Option(help="When you'll post, ISO time (local times need an offset)")],
+    text: Annotated[
+        str | None, typer.Option(help="The draft text (enables duplicate checks and labels)")
+    ] = None,
+    post_type: Annotated[
+        str, typer.Option("--type", help="original | quote | reply | self_reply")
+    ] = "original",
+    force: Annotated[bool, typer.Option(help="Register despite spacing warnings")] = False,
+) -> None:
+    """Register a planned post: its forecast is frozen now, before the post exists."""
+    from datetime import UTC, datetime
+
+    from socialmgr.services import planned
+    from socialmgr.services.plugins import load_plugins
+
+    settings = _settings()
+    engine = make_engine(settings)
+    migrate.upgrade(engine)
+    planned_at = datetime.fromisoformat(at)
+    if planned_at.tzinfo is None:
+        from zoneinfo import ZoneInfo
+
+        planned_at = planned_at.replace(tzinfo=ZoneInfo(settings.account.tz))
+    req = planned.PlanRequest(
+        planned_at=planned_at.astimezone(UTC),
+        text=text,
+        post_type=post_type,
+        registered_by="cli",
+    )
+    with session_scope(session_factory(engine)) as session:
+        try:
+            result = planned.register_planned_post(
+                session, settings, load_plugins(settings), req, now=datetime.now(UTC), allow_warnings=force
+            )
+        except planned.PlanRefused as exc:
+            for hit in exc.hits:
+                typer.echo(f"{hit.severity}: {hit.detail}", err=True)
+            typer.echo(
+                "Not registered. Use --force to accept warnings (blocks can't be overridden).", err=True
+            )
+            raise typer.Exit(1) from exc
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        q = result.forecast.quantiles
+        typer.echo(
+            f"Registered slot:{result.slot.id} for {result.slot.planned_at:%Y-%m-%d %H:%M} UTC. "
+            f"Expected 48h impressions: median {q['q50']:,.0f}, 80% range {q['q10']:,.0f} to {q['q90']:,.0f} "
+            f"({result.forecast.kind}, forecast:{result.forecast.id}, frozen)."
+        )
+        for hit in result.guardrails:
+            typer.echo(f"{hit.severity}: {hit.detail}")
