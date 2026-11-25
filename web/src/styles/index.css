@@ -1,0 +1,64 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/*
+ * Expose the canvas tokens to Tailwind: bg-ground, text-muted, border-rule,
+ * font-mono ... The default palette is removed so only tokens can be used.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-ground: var(--dashboard-ground);
+  --color-raised: var(--dashboard-raised);
+  --color-surface: var(--dashboard-surface);
+  --color-plot: var(--dashboard-plot);
+  --color-grid: var(--dashboard-grid);
+  --color-rule: var(--dashboard-rule);
+  --color-rule-strong: var(--dashboard-rule-strong);
+  --color-text: var(--dashboard-text);
+  --color-neutral: var(--dashboard-neutral);
+  --color-muted: var(--dashboard-muted);
+  --color-faint: var(--dashboard-faint);
+  --color-accent: var(--dashboard-accent);
+  --color-accent-subtle: var(--dashboard-accent-subtle);
+  --color-band: var(--dashboard-band);
+  --color-positive: var(--dashboard-positive);
+  --color-positive-subtle: var(--dashboard-positive-subtle);
+  --color-negative: var(--dashboard-negative);
+  --color-negative-subtle: var(--dashboard-negative-subtle);
+  --color-warn: var(--dashboard-warn);
+  --color-warn-subtle: var(--dashboard-warn-subtle);
+  --color-heat-1: var(--dashboard-heat-1);
+  --color-heat-2: var(--dashboard-heat-2);
+  --color-heat-3: var(--dashboard-heat-3);
+  --color-heat-4: var(--dashboard-heat-4);
+  --color-heat-5: var(--dashboard-heat-5);
+
+  --font-sans: var(--dashboard-sans);
+  --font-mono: var(--dashboard-mono);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-rule);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+}
