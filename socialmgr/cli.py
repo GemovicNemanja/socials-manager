@@ -35,12 +35,28 @@ def fixture(
     ] = None,
 ) -> None:
     """Load a deterministic fixture account by simulating daily runs over fake providers."""
+    from sqlalchemy import select
+
+    from socialmgr.db.models import Run
     from socialmgr.services.fixtures import default_until, load_fixture
     from socialmgr.services.plugins import load_plugins
 
     settings = _settings()
+    # Fixtures always use the fake providers, whatever .env selects: never the real X account.
+    fake = tuple(p for p in settings.plugins.providers if p.startswith("fake")) or ("fake_owner",)
+    settings = settings.model_copy(
+        update={"plugins": settings.plugins.model_copy(update={"providers": fake})}
+    )
     engine = make_engine(settings)
     migrate.upgrade(engine)
+    with session_factory(engine)() as session:
+        if session.scalar(select(Run.id).where(Run.trigger != "fixture").limit(1)) is not None:
+            typer.echo(
+                f"{settings.db_path} holds real runs; refusing to add fake data to it. "
+                "Point SOCIALMGR_DATA_DIR at another folder for the fixture.",
+                err=True,
+            )
+            raise typer.Exit(1)
     end = datetime.fromisoformat(until).astimezone(UTC) if until else default_until()
     with session_scope(session_factory(engine)) as session:
         summary = load_fixture(session, settings, load_plugins(settings), until=end)
