@@ -260,7 +260,9 @@ class XOwnerProvider:
                 f"{fallbacks} post(s) had no non-public metrics; impressions use the public impression_count."
             )
 
-        new_followers, n_followers = self._new_followers(api, own_id, ref.known_follower_ids, caveats)
+        new_followers, n_followers, complete = self._new_followers(
+            api, own_id, ref.known_follower_ids, caveats
+        )
         resources += n_followers
         accounts.append(
             FetchedAccount(
@@ -270,6 +272,7 @@ class XOwnerProvider:
                 followers=int(me["public_metrics"]["followers_count"]),
                 fetched_at=fetched_at,
                 new_follower_ids=new_followers,
+                new_followers_complete=complete,
             )
         )
         return resources
@@ -335,36 +338,48 @@ class XOwnerProvider:
 
     def _new_followers(
         self, api: XApi, own_id: str, known: tuple[str, ...], caveats: list[str]
-    ) -> tuple[tuple[str, ...] | None, list[str]]:
-        """Page the newest-first follower list until a known follower; returns (new ids, records read)."""
+    ) -> tuple[tuple[str, ...] | None, list[str], bool]:
+        """Page the newest-first follower list until two known followers in a row.
+
+        Returns (new ids, records read, complete). One known id alone doesn't stop paging: a
+        follower who unfollowed and followed again sits at the top of the list. ``complete`` is
+        false when paging gave up after ``MAX_FOLLOWER_PAGES``: the ids still become the new
+        baseline, but the count isn't trusted.
+        """
         known_set = set(known)
         baseline = not known_set
         params: dict[str, Any] = {"max_results": FOLLOWER_BASELINE if baseline else FOLLOWER_PAGE}
         new: list[str] = []
         returned: list[str] = []
+        known_run = 0
         for _ in range(MAX_FOLLOWER_PAGES):
             try:
                 page = api.get(f"/2/users/{own_id}/followers", params, key="followers")
             except RateLimited as exc:
                 caveats.append(f"New followers not counted this run: {exc}.")
-                return None, returned
+                return None, returned, False
             data = page.body.get("data") or []
             returned += [f"follower:{u['id']}" for u in data]
             for user in data:
-                if str(user["id"]) in known_set:
-                    return tuple(new), returned
-                new.append(str(user["id"]))
+                uid = str(user["id"])
+                if uid in known_set:
+                    known_run += 1
+                    if known_run >= 2:
+                        return tuple(new), returned, True
+                    continue
+                known_run = 0
+                new.append(uid)
             next_token = (page.body.get("meta") or {}).get("next_token")
             if baseline or not next_token:
-                return tuple(new), returned
+                return tuple(new), returned, True
             if page.rate.remaining == 0:
                 caveats.append(
                     f"New followers not counted this run: rate limit exhausted ({page.rate.describe()})."
                 )
-                return None, returned
+                return None, returned, False
             params["pagination_token"] = next_token
         caveats.append(
-            f"More than {MAX_FOLLOWER_PAGES * FOLLOWER_PAGE} followers without reaching a known one; "
-            "new followers not counted this run."
+            f"More than {MAX_FOLLOWER_PAGES * FOLLOWER_PAGE} followers without reaching known ones; "
+            "this run's count is unknown and the newest followers become the new baseline."
         )
-        return None, returned
+        return tuple(new), returned, False

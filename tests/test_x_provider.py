@@ -182,8 +182,39 @@ def test_no_new_followers(settings: Settings) -> None:
         .on(TL, respond(EMPTY))
         .on(FL, respond(_users("k1", "k0", next_token="c2")))
     )
-    batch = _collect(settings, fake, _ref(known=("k1",)))
+    batch = _collect(settings, fake, _ref(known=("k1", "k0")))
     assert batch.accounts[0].new_follower_ids == ()
+
+
+def test_a_refollower_at_the_top_doesnt_hide_newer_followers(settings: Settings) -> None:
+    # k5 unfollowed and followed again, so it's first; n1 and n2 followed before that, after the last run.
+    fake = (
+        FakeX()
+        .on("/2/users/me", respond(me_body()))
+        .on(TL, respond(EMPTY))
+        .on(FL, respond(_users("k5", "n2", "n1", "k4", "k3", next_token="c2")))
+    )
+    batch = _collect(settings, fake, _ref(known=("k5", "k4", "k3")))
+    assert batch.accounts[0].new_follower_ids == ("n2", "n1")
+    assert batch.accounts[0].new_followers_complete
+
+
+def test_follower_paging_gives_up_but_records_a_new_baseline(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import socialmgr.providers.x.provider as xp
+
+    monkeypatch.setattr(xp, "MAX_FOLLOWER_PAGES", 2)
+    fake = (
+        FakeX()
+        .on("/2/users/me", respond(me_body()))
+        .on(TL, respond(EMPTY))
+        .on(FL, respond(_users("a", "b", next_token="more")))
+    )
+    batch = _collect(settings, fake, _ref(known=("old1", "old2")))
+    acct = batch.accounts[0]
+    assert acct.new_followers_complete is False and acct.new_follower_ids  # recorded, count untrusted
+    assert any("new baseline" in c for c in batch.caveats)
 
 
 def test_429_on_timeline_keeps_what_it_has(settings: Settings) -> None:

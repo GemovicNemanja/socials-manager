@@ -54,6 +54,9 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
     caveats: list[str] = []
     for name in ("collect", "regimes", "label"):
         caveats += result(name).get("caveats", [])
+    previous = pipeline.last_finished_run(session, settings.workspace_id, before=run.cutoff_at)
+    if previous is not None:
+        caveats += (previous.steps or {}).get("backup", {}).get("result", {}).get("caveats", [])
     upcoming = session.scalars(
         select(PlannedSlot)
         .where(PlannedSlot.workspace_id == settings.workspace_id, PlannedSlot.state == "planned")

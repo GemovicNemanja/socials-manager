@@ -51,6 +51,7 @@ class FetchedAccount(Frozen):
     # (e.g. rate limited). With no known_follower_ids on the request this is a baseline sample, not
     # "new" followers.
     new_follower_ids: tuple[str, ...] | None = None
+    new_followers_complete: bool = True  # false: ids recorded as a baseline, count not trusted
 
 
 class FetchedPost(Frozen):

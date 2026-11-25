@@ -151,8 +151,11 @@ def _backup(ctx: RunContext) -> dict[str, Any]:
     if not ctx.settings.run.backup:
         return {"skipped": True}
     ctx.session.commit()  # the backup must contain everything up to here
-    path = backups.backup(ctx.settings, now=ctx.clock())
-    pruned = backups.prune(ctx.settings)
+    try:
+        path = backups.backup(ctx.settings, now=ctx.clock())
+        pruned = backups.prune(ctx.settings)
+    except OSError as exc:  # a full or missing backup folder mustn't block tomorrow's collection
+        return {"error": str(exc), "caveats": [f"Backup failed: {exc}. Check SOCIALMGR_BACKUP_DIR."]}
     return {"path": str(path), "pruned": len(pruned)}
 
 
@@ -179,6 +182,11 @@ def run_lock(settings: Settings) -> Iterator[None]:
         yield
     finally:
         os.close(fd)
+
+
+def _stale_before_collect(run: Run, now: datetime) -> bool:
+    collected = (run.steps or {}).get("collect", {}).get("status") == "done"
+    return not collected and run.cutoff_at.astimezone(UTC).date() < now.astimezone(UTC).date()
 
 
 def unfinished_run(session: Session, workspace_id: int) -> Run | None:
@@ -219,6 +227,13 @@ def execute(
     """Resume the unfinished run if there is one, else start a new one; run every step not yet done."""
     pipeline.ensure_accounts(session, settings, clock())
     run = unfinished_run(session, settings.workspace_id)
+    if run is not None and _stale_before_collect(run, clock()):
+        # Collecting now under an old cutoff would stamp today's counts with yesterday's time
+        # (a look-ahead for posts in between) and bill under the wrong day: drop it and start fresh.
+        run.status = "abandoned"
+        run.finished_at = clock()
+        session.commit()
+        run = None
     resumed = run is not None
     if run is None:
         run = pipeline.start_run(session, settings, trigger=trigger, cutoff=cutoff or clock(), now=clock())

@@ -65,7 +65,12 @@ def _envelope(
 ) -> dict[str, Any]:
     last = pipeline.last_finished_run(session, settings.workspace_id)
     owner_n = _owner_n(session, settings)
-    latest = session.scalar(select(Forecast).order_by(Forecast.id.desc()).limit(1))
+    latest = session.scalar(
+        select(Forecast)
+        .where(Forecast.workspace_id == settings.workspace_id)
+        .order_by(Forecast.id.desc())
+        .limit(1)
+    )
     model_version = latest.model_version if latest else None
     calibrated = bool(latest and latest.input_manifest.get("calibrated"))
     notes = list(caveats or [])

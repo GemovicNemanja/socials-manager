@@ -148,7 +148,7 @@ def fit(pairs: Sequence[CapturePair]) -> Curve:
     scale, shape, kappa = (float(math.exp(v)) for v in result.x)
     scale, shape, kappa = round(scale, 4), round(shape, 4), round(kappa, 1)
     return Curve(
-        version=f"{FAMILY}-{scale:.4f}h-{shape:.4f}",
+        version=f"{FAMILY}-{scale:.4f}h-{shape:.4f}-k{kappa:.0f}",
         scale_h=scale,
         shape=shape,
         kappa=kappa,

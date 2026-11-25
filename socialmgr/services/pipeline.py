@@ -154,6 +154,15 @@ class CollectSummary:
     skipped: bool = False
 
 
+def earliest_followers(session: Session, account_id: int) -> int | None:
+    return session.scalar(
+        select(FollowerSnapshot.followers)
+        .where(FollowerSnapshot.account_id == account_id)
+        .order_by(FollowerSnapshot.fetched_at, FollowerSnapshot.id)
+        .limit(1)
+    )
+
+
 def _followers_before(session: Session, account_id: int, t: datetime) -> int | None:
     """Follower count from the last run before ``t``: carried forward, never interpolated (MODEL A21)."""
     return session.scalar(
@@ -196,7 +205,7 @@ def _bill(
     return cost
 
 
-KNOWN_FOLLOWERS_SENT = 50
+KNOWN_FOLLOWERS_SENT = 200
 
 
 def _recent_follower_ids(session: Session, account_id: int) -> tuple[str, ...]:
@@ -289,7 +298,8 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
                 acct.external_id = fa.external_id
             follower_counts.setdefault(fa.account_id, fa.followers)
             known = next((r.known_follower_ids for r in refs if r.account_id == fa.account_id), ())
-            if fa.new_follower_ids is not None and known:  # without known ids it is only a baseline
+            if fa.new_follower_ids is not None and known and fa.new_followers_complete:
+                # without known ids (first run) or after giving up, it is only a baseline
                 new_follower_counts.setdefault(fa.account_id, len(fa.new_follower_ids))
             if fa.new_follower_ids:
                 _record_followers(session, settings, run, fa.account_id, fa.new_follower_ids)
@@ -432,17 +442,19 @@ def effective_labels(session: Session, post_id: int) -> dict[str, str]:
 
 
 def curve_as_of(session: Session, workspace_id: int, cutoff: datetime | None) -> maturity.Curve:
-    """The newest curve fitted by a run that finished at or before ``cutoff``."""
+    """The curve recorded by the newest run at or before ``cutoff`` (its fit_curve step result)."""
     if cutoff is None:
         return maturity.PRIOR
-    row = session.scalar(
-        select(MaturityCurve)
-        .join(Run, Run.id == MaturityCurve.run_id)
-        .where(MaturityCurve.workspace_id == workspace_id, Run.cutoff_at <= cutoff)
-        .order_by(Run.cutoff_at.desc(), MaturityCurve.id.desc())
-        .limit(1)
-    )
-    return _curve_from_row(row) if row else maturity.PRIOR
+    for run in session.scalars(
+        select(Run)
+        .where(Run.workspace_id == workspace_id, Run.cutoff_at <= cutoff)
+        .order_by(Run.cutoff_at.desc(), Run.id.desc())
+    ):
+        step = (run.steps or {}).get("fit_curve", {})
+        version = step.get("result", {}).get("curve_version") if step.get("status") == "done" else None
+        if version:
+            return load_curve(session, version)
+    return maturity.PRIOR
 
 
 def load_curve(session: Session, version: str) -> maturity.Curve:
@@ -470,9 +482,10 @@ def capture_pairs(session: Session, workspace_id: int, cutoff: datetime) -> list
         select(MetricSnapshot.post_id, MetricSnapshot.age_s, MetricSnapshot.impressions)
         .join(Post, Post.id == MetricSnapshot.post_id)
         .join(Account, Account.id == Post.account_id)
+        .join(Run, Run.id == MetricSnapshot.run_id)
         .where(
             MetricSnapshot.workspace_id == workspace_id,
-            MetricSnapshot.fetched_at <= cutoff,
+            Run.cutoff_at <= cutoff,
             MetricSnapshot.impressions.is_not(None),
             Account.role == "owner",
         )
@@ -533,9 +546,10 @@ def matured_examples(
     """Outcomes visible at ``cutoff``: each post's first capture at age >= 48h fetched by then."""
     first_mature = (
         select(MetricSnapshot.post_id, func.min(MetricSnapshot.age_s).label("age_s"))
+        .join(Run, Run.id == MetricSnapshot.run_id)
         .where(
             MetricSnapshot.workspace_id == workspace_id,
-            MetricSnapshot.fetched_at <= cutoff,
+            Run.cutoff_at <= cutoff,
             MetricSnapshot.age_s >= int(maturity.PRIMARY_AGE_H * 3600),
         )
         .group_by(MetricSnapshot.post_id)
@@ -564,7 +578,11 @@ def matured_examples(
                 account_role=role,
                 created_at=post.created_at,
                 type=post.type,
-                followers_at_post=post.followers_at_post or 0,
+                followers_at_post=(
+                    post.followers_at_post
+                    if post.followers_at_post is not None
+                    else earliest_followers(session, post.account_id) or 0
+                ),
                 outcome_i48=round(estimate, 3),
             )
         )
@@ -601,25 +619,24 @@ def _manifest(
     cutoff = snapshot.cutoff_at if snapshot else None
     curve = curve_as_of(session, workspace_id, cutoff)
     examples = matured_examples(session, workspace_id, cutoff, curve) if cutoff else []
+    # Carried forward from the last run at or before the snapshot that measured it (MODEL A21):
+    # a run whose collection was skipped (cap, rate limit) wrote no count of its own.
     followers = (
         session.scalar(
-            select(FollowerSnapshot.followers).where(
-                FollowerSnapshot.run_id == snapshot.id, FollowerSnapshot.account_id == account_id
-            )
+            select(FollowerSnapshot.followers)
+            .join(Run, Run.id == FollowerSnapshot.run_id)
+            .where(FollowerSnapshot.account_id == account_id, Run.cutoff_at <= snapshot.cutoff_at)
+            .order_by(Run.cutoff_at.desc(), FollowerSnapshot.id.desc())
+            .limit(1)
         )
         if snapshot
         else None
     )
     followers_source = "snapshot"
-    if snapshot is None:
-        # Posted before the first run (the first run back-fills 30 days): no as-of count exists.
-        # Use the earliest count instead of 0, a small look-ahead that is flagged in the manifest.
-        followers = session.scalar(
-            select(FollowerSnapshot.followers)
-            .where(FollowerSnapshot.account_id == account_id)
-            .order_by(FollowerSnapshot.fetched_at, FollowerSnapshot.id)
-            .limit(1)
-        )
+    if followers is None:
+        # Posted before any count existed (the first run back-fills 30 days). Use the earliest
+        # count instead of 0: a small look-ahead, flagged in the manifest.
+        followers = earliest_followers(session, account_id)
         followers_source = "first_run_backfill"
     created_at = datetime.fromisoformat(subject["created_at"])
     return {

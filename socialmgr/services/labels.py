@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from socialmgr.core.config import Settings
 from socialmgr.core.types import LabelInput
-from socialmgr.db.models import Account, Label, Post
+from socialmgr.db.models import Account, Forecast, Label, Post
 from socialmgr.labelling import minhash, rules
 from socialmgr.labelling.taxonomy import LABEL_SET_VERSION, LLM_FIELDS
 from socialmgr.services.plugins import ActivePlugins
@@ -64,8 +64,19 @@ def label_posts(session: Session, settings: Settings, plugins: ActivePlugins, no
         )
     )
 
-    # Rule labels and features, once per post.
+    frozen = set(session.scalars(select(Forecast.subject).where(Forecast.subject.like("post:%"))))
     for i, post in enumerate(owner_posts):
+        # Cadence features are refreshed until the post's forecast is frozen: an older post that
+        # only arrives at a later run (paging stopped early) changes its neighbours' gaps.
+        if f"post:{post.id}" not in frozen:
+            earlier = [p for p in owner_posts[:i] if p.created_at < post.created_at]
+            post.gap_since_prev_min = (
+                round((post.created_at - earlier[-1].created_at).total_seconds() / 60, 1) if earlier else None
+            )
+            post.own_posts_48h = sum(
+                1 for p in earlier if post.created_at - p.created_at <= timedelta(hours=48)
+            )
+        # Rule labels and text features, once per post.
         if post.text_len_weighted is not None:
             continue
         text = post.text or ""
@@ -73,10 +84,6 @@ def label_posts(session: Session, settings: Settings, plugins: ActivePlugins, no
         post.text_len_weighted = feats.text_len_weighted
         post.newlines = feats.newlines
         earlier = [p for p in owner_posts[:i] if p.created_at < post.created_at]
-        post.gap_since_prev_min = (
-            round((post.created_at - earlier[-1].created_at).total_seconds() / 60, 1) if earlier else None
-        )
-        post.own_posts_48h = sum(1 for p in earlier if post.created_at - p.created_at <= timedelta(hours=48))
         sig = minhash.signature(text)
         post.minhash = minhash.to_bytes(sig)
         if text:
@@ -90,9 +97,13 @@ def label_posts(session: Session, settings: Settings, plugins: ActivePlugins, no
         fmt = rules.format_label(post_type=post.type, media_kind=media_kind, has_url=post.has_url)
         _add(session, settings, post.id, "format", fmt, "rule", now)
         summary.rule_labelled += 1
-    session.flush()
+    # Commit before the LLM call so the run doesn't hold SQLite's write lock while it waits
+    # (the web app and agent tools write too). The rule part above is idempotent.
+    session.commit()
 
     # LLM labels for posts that have none yet (owner and provider labels take precedence anyway).
+    if plugins.labeler.name == "none":
+        return summary
     pending = [
         p
         for p in owner_posts

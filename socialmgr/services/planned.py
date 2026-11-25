@@ -63,12 +63,14 @@ def check_guardrails(session: Session, owner_id: int, req: PlanRequest, now: dat
     if req.text:
         sig = minhash.signature(req.text)
         recent = session.execute(
-            select(Post.id, Post.minhash)
-            .where(Post.account_id == owner_id, Post.minhash.is_not(None))
+            select(Post.id, Post.minhash, Post.text)
+            .where(Post.account_id == owner_id, Post.text.is_not(None))
             .order_by(Post.created_at.desc())
             .limit(NEAR_DUP_LOOKBACK)
         ).all()
-        match_id, sim = minhash.nearest(sig, [(r[0], r[1]) for r in recent])
+        # Posts collected but not labelled yet have no stored signature: compute it from the text.
+        signatures = [(r[0], r[1] or minhash.to_bytes(minhash.signature(r[2] or ""))) for r in recent]
+        match_id, sim = minhash.nearest(sig, signatures)
         if match_id is not None and sim >= minhash.NEAR_DUPLICATE:
             hits.append(
                 GuardrailHit(
@@ -199,6 +201,7 @@ def match_planned(session: Session, settings: Settings, cutoff: datetime) -> Mat
                 select(Post).where(
                     Post.account_id == owner.id,
                     Post.slot_id.is_(None),
+                    Post.created_at >= slot.created_at,  # a live forecast must predate its post
                     Post.created_at >= slot.planned_at - TEXT_MATCH_WINDOW,
                     Post.created_at <= slot.planned_at + TEXT_MATCH_WINDOW,
                 )
