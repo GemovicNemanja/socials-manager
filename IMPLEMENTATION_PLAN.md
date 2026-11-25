@@ -78,10 +78,10 @@ React components mirror the Platform Components board one to one, but only those
 | Database | **SQLite** (WAL), SQLAlchemy 2, Alembic | One file under the data folder. Append-only tables (`forecasts`, `forecast_draws`, `assignments`, `scores`, `metric_snapshots`) reject UPDATE and DELETE via triggers. |
 | Run orchestrator | One process, steps run in order, each idempotent and checkpointed in `runs` | A run fixes its collection cutoff when it starts. An interrupted run resumes within 24h, else it closes and a new one starts. A file lock stops two runs overlapping. |
 | Modelling | NumPyro 0.22 + JAX 0.12.1, ArviZ 1.3, statsmodels 0.15, scoringrules 0.12, ruptures 1.1.10, polars | As MODEL §9. One fit per run on CPU. |
-| Labelling | Claude Haiku 5.5 (`claude-haiku-5-5`), called synchronously; deterministic rules first | No batch API (no backfill). Owner overrides win. |
+| Labelling | Deterministic rules first, then a `Labeler` interface. Default: headless Claude Code (`claude -p --model haiku --json-schema …`) on the member's own subscription, so no API key is needed; alternative: the Anthropic API with `claude-haiku-5-5`. Agents registering a planned post can pass labels themselves. | About 5 s per post; owner overrides win. Validated 2026-11-25. |
 | Near-duplicates | MinHash | No embeddings in v1. |
 | Frontend | React + TypeScript + Vite, pnpm, Tailwind v4, TanStack Query, uPlot | Dark only, desktop ≥ 1280px. Tokens from the canvas `dashboard/*` set as CSS variables. TS client generated from FastAPI's OpenAPI. |
-| Secrets | `.env` (gitignored) for the X app keys and the Anthropic key; X OAuth tokens in a `credentials` table | Local single user, so no keychain. |
+| Secrets | `.env` (gitignored) for the X app client ID (and the Anthropic key only if that labeller is chosen); X OAuth tokens in a `credentials` table | Local single user, so no keychain. |
 | X connection | `socialmgr connect`: opens the browser for OAuth 2.0 PKCE, catches the localhost callback, stores tokens | Replaces the setup page. |
 | Backups | SQLite online backup to a configured folder at the end of every run and every session that registers slots or planned posts; `socialmgr restore` | Frozen forecasts and assignments can't be recreated. |
 | CI | GitHub Actions: lint, type check, unit, integration and simulation tests | |
@@ -314,6 +314,7 @@ Estimates assume one engineer with coding agents.
 | MCP schemas | Pydantic, per milestone |
 | Draw store | Append-only database table |
 | Embeddings | None in v1 |
+| Labelling backend | Headless Claude Code on the member's subscription by default; no Anthropic API key needed |
 | Notifications | None in v1 (revision 5 removes them; the briefing covers it) |
 | Setup screen | Replaced by `socialmgr connect` (revision 5) |
 | Database | SQLite instead of PostgreSQL (revision 5) |
