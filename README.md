@@ -26,6 +26,14 @@ Settings come from environment variables prefixed `SOCIALMGR_` or a local `.env`
 
 Providers, the prior source and models are chosen by name in config (`SOCIALMGR_PLUGINS__...`). A name is either a built-in (`fake_owner`, `fake_public`, `hand_set`, `trailing_median`) or a `module:attribute` path to your own implementation of the interfaces in `socialmgr/core/interfaces.py`.
 
+## Connecting your X account
+
+1. In the X developer portal, set up OAuth 2.0 for your app as a **Native App** (public client, no secret) with the callback `http://127.0.0.1:8765/auth/x/callback`.
+2. Put its Client ID in `.env` as `SOCIALMGR_X__CLIENT_ID=...` and set `SOCIALMGR_ACCOUNT__HANDLE` to your handle. Use a data folder without fixture data.
+3. Stop `socialmgr serve` (it uses the same port), then run `uv run socialmgr connect` and approve in the browser. Tokens are stored in the local database only.
+4. Select the provider with `SOCIALMGR_PLUGINS__PROVIDERS='["x"]'`.
+5. On day 1, run `uv run socialmgr probe` (and again a day later for the follower-order check). Reports are saved under `data/probes/`.
+
 ## Development
 
 ```sh

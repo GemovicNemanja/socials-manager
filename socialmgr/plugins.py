@@ -22,6 +22,14 @@ def _fake_public(settings: Settings) -> DataProvider:
     return FakePublicProvider()
 
 
+@providers.register("x")
+def _x(settings: Settings) -> DataProvider:
+    # Imported here so loading the registry doesn't build an HTTP client or touch credentials.
+    from socialmgr.providers.x.provider import XOwnerProvider
+
+    return XOwnerProvider(settings)
+
+
 @prior_sources.register("hand_set")
 def _hand_set(settings: Settings) -> PriorSource:
     return HandSetPrior()

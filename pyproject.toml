@@ -7,6 +7,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "alembic>=1.14",
     "fastapi>=0.115",
+    "httpx>=0.28",
     "numpy>=2.1",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -21,7 +22,6 @@ socialmgr = "socialmgr.cli:app"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",

@@ -124,6 +124,7 @@ class CollectSummary:
     new_posts: int
     snapshots: int
     cost_usd: float
+    caveats: tuple[str, ...] = ()
 
 
 def _followers_before(session: Session, account_id: int, t: datetime) -> int | None:
@@ -144,6 +145,8 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
     new_posts = snapshots = 0
     cost = 0.0
     follower_counts: dict[int, int] = {}
+    new_follower_counts: dict[int, int] = {}
+    caveats: list[str] = []
     for provider in plugins.providers:
         refs = tuple(
             AccountRef(
@@ -162,6 +165,10 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
             if acct is not None and acct.external_id is None:
                 acct.external_id = fa.external_id
             follower_counts.setdefault(fa.account_id, fa.followers)
+            known = next((r.known_follower_ids for r in refs if r.account_id == fa.account_id), ())
+            if fa.new_follower_ids is not None and known:  # without known ids it is only a baseline
+                new_follower_counts.setdefault(fa.account_id, len(fa.new_follower_ids))
+        caveats += [f"{batch.provider}: {c}" for c in batch.caveats]
 
         post_ids: dict[str, int] = {}
         for fp in batch.posts:
@@ -257,10 +264,13 @@ def collect(session: Session, settings: Settings, plugins: ActivePlugins, run: R
                 run_id=run.id,
                 fetched_at=run.cutoff_at,
                 followers=followers,
+                new_followers=new_follower_counts.get(account_id),
             )
         )
     session.flush()
-    return CollectSummary(new_posts=new_posts, snapshots=snapshots, cost_usd=round(cost, 6))
+    return CollectSummary(
+        new_posts=new_posts, snapshots=snapshots, cost_usd=round(cost, 6), caveats=tuple(caveats)
+    )
 
 
 # ---------------------------------------------------------------- forecasts

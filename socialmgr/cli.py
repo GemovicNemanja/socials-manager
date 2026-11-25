@@ -83,6 +83,55 @@ def restore(source: Path) -> None:
 
 
 @app.command()
+def connect() -> None:
+    """Connect your X account (OAuth 2.0 with PKCE in the browser) and store its tokens locally."""
+    import httpx
+
+    from socialmgr.providers.x.connect import run_connect
+    from socialmgr.providers.x.errors import XError
+
+    settings = _settings()
+    engine = make_engine(settings)
+    migrate.upgrade(engine)
+    try:
+        with httpx.Client(timeout=30.0) as http:
+            result = run_connect(settings, session_factory(engine), http=http, echo=typer.echo)
+    except XError as exc:
+        typer.secho(str(exc), fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(1) from exc
+    expires = result.expires_at.isoformat() if result.expires_at else "unknown"
+    typer.echo(f"Connected @{result.username} (X user {result.user_id}). Access token valid until {expires}.")
+
+
+@app.command()
+def probe(
+    follower_sample: Annotated[
+        int, typer.Option(min=1, max=1000, help="Newest followers to sample for the order check")
+    ] = 200,
+) -> None:
+    """Day-1 probes against the real X API: rate limits, follower order, analytics availability."""
+    import httpx
+
+    from socialmgr.providers.x.errors import XError
+    from socialmgr.providers.x.probe import run_probe
+
+    settings = _settings()
+    engine = make_engine(settings)
+    migrate.upgrade(engine)
+    try:
+        with httpx.Client(timeout=30.0) as http:
+            report, path = run_probe(
+                settings, session_factory(engine), http=http, follower_sample=follower_sample
+            )
+    except XError as exc:
+        typer.secho(str(exc), fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(1) from exc
+    printed = {**report, "follower_order": {**report["follower_order"], "sample_ids": "(saved to file)"}}
+    typer.echo(json.dumps(printed, indent=2))
+    typer.echo(f"Saved {path}")
+
+
+@app.command()
 def openapi(out: Path = Path("openapi.json")) -> None:
     """Write the API schema used to generate the web client's types."""
     from socialmgr.api.app import create_app

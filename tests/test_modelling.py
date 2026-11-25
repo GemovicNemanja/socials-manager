@@ -40,6 +40,6 @@ def test_crps_is_smaller_near_the_centre() -> None:
 def test_registry_errors_name_the_options() -> None:
     reg: Registry[int] = Registry("thing")
     reg.register("one")(lambda s: 1)
-    assert reg.resolve("one", Settings(_env_file=None)) == 1  # type: ignore[call-arg]
+    assert reg.resolve("one", Settings(_env_file=None)) == 1
     with pytest.raises(LookupError, match="Built-ins: one"):
-        reg.resolve("two", Settings(_env_file=None))  # type: ignore[call-arg]
+        reg.resolve("two", Settings(_env_file=None))

@@ -27,6 +27,21 @@ class PeerConfig(BaseModel):
     role: str = "peer"
 
 
+class XConfig(BaseModel):
+    """The X developer app ("Native App": OAuth 2.0 with PKCE, a public client without a secret).
+
+    Set ``SOCIALMGR_X__CLIENT_ID`` in ``.env``; the client id is never committed.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    client_id: str | None = None
+    redirect_uri: str = "http://127.0.0.1:8765/auth/x/callback"
+    scopes: tuple[str, ...] = ("tweet.read", "users.read", "follows.read", "offline.access")
+    api_base: str = "https://api.x.com"
+    authorize_url: str = "https://x.com/i/oauth2/authorize"
+
+
 class PluginConfig(BaseModel):
     """Which implementation backs each extension interface (IMPLEMENTATION_PLAN.md §13).
 
@@ -59,6 +74,7 @@ class Settings(BaseSettings):
     account: AccountConfig = AccountConfig()
     peers: tuple[PeerConfig, ...] = ()
     plugins: PluginConfig = PluginConfig()
+    x: XConfig = XConfig()
 
     @property
     def db_path(self) -> Path:
