@@ -15,3 +15,15 @@ export type PostItem = PostsResponse["items"][number];
 export type PostStatus = PostItem["status"];
 export type PostsQuery = NonNullable<paths["/api/posts"]["get"]["parameters"]["query"]>;
 export type PostsStatusFilter = NonNullable<PostsQuery["status"]>;
+export type StatusCounts = PostsResponse["counts_by_status"];
+
+export type OverviewResponse = JsonOk<"/api/overview">;
+export type OverviewTiles = OverviewResponse["tiles"];
+export type Kpi = OverviewTiles["impressions_7d"];
+export type FollowerPoint = OverviewResponse["follower_series"][number];
+
+export type PostDetailResponse = JsonOk<"/api/posts/{post_id}">;
+export type ForecastDetail = NonNullable<PostDetailResponse["forecast"]>;
+export type ScoreDetail = NonNullable<PostDetailResponse["score"]>;
+export type SnapshotPoint = PostDetailResponse["snapshots"][number];
+export type PostLabel = PostDetailResponse["labels"][number];

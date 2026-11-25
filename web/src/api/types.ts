@@ -55,16 +55,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/posts/{post_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Post
+         * @description One post: labels, frozen forecast, score and captures. Accepts `post:12` or `12`.
+         */
+        get: operations["post_api_posts__post_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["overview_api_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Calibration
+         * @description Share of scored posts whose outcome fell inside the frozen 50% and 80% ranges.
+         */
+        Calibration: {
+            /** N */
+            n: number;
+            /** In 50 Rate */
+            in_50_rate: number | null;
+            /** In 80 Rate */
+            in_80_rate: number | null;
+        };
+        /**
+         * CurvePoint
+         * @description The frozen 48h forecast mapped to an earlier or later age with the forecast's maturity curve.
+         */
+        CurvePoint: {
+            /** Age H */
+            age_h: number;
+            /** Q10 */
+            q10: number;
+            /** Q50 */
+            q50: number;
+            /** Q90 */
+            q90: number;
+        };
         /** DataSufficiency */
         DataSufficiency: {
             /** Owner N */
             owner_n: number;
             /** Reason */
             reason: string | null;
+        };
+        /**
+         * ExpectedRange
+         * @description The 10/50/90% quantiles of a KPI's predictive distribution and where the actual landed.
+         */
+        ExpectedRange: {
+            /** Q10 */
+            q10: number;
+            /** Q50 */
+            q50: number;
+            /** Q90 */
+            q90: number;
+            /** Percentile */
+            percentile: number;
+            /** N Posts */
+            n_posts: number;
+            /** Method */
+            method: string;
+        };
+        /** FollowerPoint */
+        FollowerPoint: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Followers */
+            followers: number;
+        };
+        /** FollowersKpi */
+        FollowersKpi: {
+            /** Now */
+            now: number | null;
+            /** Change 7D */
+            change_7d: number | null;
+            /** Change 28D */
+            change_28d: number | null;
+        };
+        /** ForecastDetail */
+        ForecastDetail: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "live" | "as_of" | "treatment_blind" | "prior_only_uncalibrated";
+            /** Metric */
+            metric: string;
+            /** Horizon H */
+            horizon_h: number;
+            /** Model Version */
+            model_version: string;
+            /** Curve Version */
+            curve_version: string;
+            quantiles: components["schemas"]["Quantiles"];
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Manifest Hash */
+            manifest_hash: string;
+            /** Draws Hash */
+            draws_hash: string;
+            /** Snapshot Run Id */
+            snapshot_run_id: string | null;
+            /** By Age */
+            by_age: components["schemas"]["CurvePoint"][];
         };
         /** ForecastSummary */
         ForecastSummary: {
@@ -93,6 +225,117 @@ export interface components {
             exact: boolean;
             /** Provisional */
             provisional: boolean;
+        };
+        /** Kpi */
+        Kpi: {
+            /** Value */
+            value: number | null;
+            /** Previous */
+            previous: number | null;
+            /** N Posts */
+            n_posts: number;
+            expected: components["schemas"]["ExpectedRange"] | null;
+        };
+        /** Overview */
+        Overview: {
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats: string[];
+            account: components["schemas"]["ShellAccount"] | null;
+            /** Tracked Since */
+            tracked_since: string | null;
+            /** Days Tracked */
+            days_tracked: number | null;
+            /** Total Posts */
+            total_posts: number;
+            tiles: components["schemas"]["OverviewTiles"];
+            /** Follower Series */
+            follower_series: components["schemas"]["FollowerPoint"][];
+            status_7d: components["schemas"]["StatusCounts"];
+            status_28d: components["schemas"]["StatusCounts"];
+            calibration: components["schemas"]["Calibration"];
+            /** Recent Posts */
+            recent_posts: components["schemas"]["PostItem"][];
+            last_run: components["schemas"]["OverviewRun"] | null;
+            spend: components["schemas"]["ShellSpend"];
+            /** Pending Areas */
+            pending_areas: components["schemas"]["PendingAreaInfo"][];
+        };
+        /** OverviewRun */
+        OverviewRun: {
+            /** Id */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "finished" | "running" | "failed";
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Gap Since Prev H */
+            gap_since_prev_h: number | null;
+            /** Spend Usd */
+            spend_usd: number;
+        };
+        /** OverviewTiles */
+        OverviewTiles: {
+            followers: components["schemas"]["FollowersKpi"];
+            impressions_7d: components["schemas"]["Kpi"];
+            median_i48: components["schemas"]["Kpi"];
+            profile_visits_7d: components["schemas"]["Kpi"];
+            profile_visit_share_7d: components["schemas"]["RatioKpi"];
+            follows_per_1k_7d: components["schemas"]["RatioKpi"];
+            visit_to_follow_7d: components["schemas"]["RatioKpi"];
+            posts_7d: components["schemas"]["Kpi"];
+        };
+        /** PendingAreaInfo */
+        PendingAreaInfo: {
+            /**
+             * Area
+             * @enum {string}
+             */
+            area: "briefing" | "follower_forecast" | "model_health" | "goals" | "planned_posts";
+            /** Milestone */
+            milestone: string;
+            /** Reason */
+            reason: string;
+        };
+        /** PostDetail */
+        PostDetail: {
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats: string[];
+            post: components["schemas"]["PostItem"];
+            /** Has Url */
+            has_url: boolean;
+            /** Media Kind */
+            media_kind: string | null;
+            /** Followers At Post */
+            followers_at_post: number | null;
+            /** Labels */
+            labels: components["schemas"]["PostLabel"][];
+            forecast: components["schemas"]["ForecastDetail"] | null;
+            score: components["schemas"]["ScoreDetail"] | null;
+            /** Snapshots */
+            snapshots: components["schemas"]["SnapshotPoint"][];
         };
         /** PostItem */
         PostItem: {
@@ -130,6 +373,19 @@ export interface components {
              */
             status: "above" | "as_expected" | "below" | "provisional" | "no_forecast";
         };
+        /** PostLabel */
+        PostLabel: {
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
+            /** Source */
+            source: string;
+            /** Confidence */
+            confidence: number | null;
+            /** Label Set Version */
+            label_set_version: string;
+        };
         /** PostsPage */
         PostsPage: {
             /** As Of */
@@ -144,6 +400,61 @@ export interface components {
             counts_by_status: components["schemas"]["StatusCounts"];
             /** Items */
             items: components["schemas"]["PostItem"][];
+        };
+        /** Quantiles */
+        Quantiles: {
+            /** Q05 */
+            q05: number | null;
+            /** Q10 */
+            q10: number | null;
+            /** Q25 */
+            q25: number | null;
+            /** Q50 */
+            q50: number | null;
+            /** Q75 */
+            q75: number | null;
+            /** Q90 */
+            q90: number | null;
+            /** Q95 */
+            q95: number | null;
+        };
+        /** RatioKpi */
+        RatioKpi: {
+            /** Value */
+            value: number | null;
+            /** Numerator */
+            numerator: number | null;
+            /** Denominator */
+            denominator: number | null;
+        };
+        /** ScoreDetail */
+        ScoreDetail: {
+            /** Outcome */
+            outcome: number;
+            /** Capture Age H */
+            capture_age_h: number;
+            /** Exact */
+            exact: boolean;
+            /** Late Maturity */
+            late_maturity: boolean;
+            /** Pit Mid */
+            pit_mid: number;
+            /** Crps Log */
+            crps_log: number;
+            /** In 50 */
+            in_50: boolean;
+            /** In 80 */
+            in_80: boolean;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "above" | "as_expected" | "below";
+            /**
+             * Scored At
+             * Format: date-time
+             */
+            scored_at: string;
         };
         /** Shell */
         Shell: {
@@ -196,6 +507,38 @@ export interface components {
             spent_usd: number;
             /** Cap Usd */
             cap_usd: number;
+        };
+        /** SnapshotPoint */
+        SnapshotPoint: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Age H */
+            age_h: number;
+            /** Provider */
+            provider: string;
+            /** Impressions Source */
+            impressions_source: string;
+            /** Impressions */
+            impressions: number | null;
+            /** Likes */
+            likes: number | null;
+            /** Reposts */
+            reposts: number | null;
+            /** Quotes */
+            quotes: number | null;
+            /** Replies */
+            replies: number | null;
+            /** Bookmarks */
+            bookmarks: number | null;
+            /** Profile Clicks */
+            profile_clicks: number | null;
+            /** Link Clicks */
+            link_clicks: number | null;
         };
         /** StatusCounts */
         StatusCounts: {
@@ -318,6 +661,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_api_posts__post_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostDetail"];
+                };
+            };
+            /** @description No such post */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Overview"];
                 };
             };
         };
