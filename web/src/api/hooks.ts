@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { api, unwrap } from "./client";
+import { api, ApiError, unwrap } from "./client";
 import type { PostsStatusFilter } from "./models";
 
 export const PAGE_SIZE = 50;
@@ -7,7 +7,28 @@ export const PAGE_SIZE = 50;
 export const queryKeys = {
   shell: ["shell"] as const,
   posts: (status: PostsStatusFilter) => ["posts", { status }] as const,
+  post: (id: string) => ["post", id] as const,
+  overview: ["overview"] as const,
 };
+
+/** KPI tiles, follower series, status counts, recent posts and last run for the Overview screen. */
+export function useOverview() {
+  return useQuery({
+    queryKey: queryKeys.overview,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/overview", { signal })),
+    refetchInterval: 60_000,
+  });
+}
+
+/** One post for the detail drawer; idle while no post is selected. */
+export function usePostDetail(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.post(id ?? ""),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/posts/{post_id}", { params: { path: { post_id: id! } }, signal })),
+    enabled: id != null,
+    retry: (count, error) => count < 1 && !(error instanceof ApiError && error.status === 404),
+  });
+}
 
 /** Account, last run, month spend and counts for the app shell. */
 export function useShell() {

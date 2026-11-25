@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from socialmgr import __version__
 from socialmgr.core.config import Settings
 from socialmgr.db.session import make_engine, session_factory
-from socialmgr.services import read_models
+from socialmgr.services import overview as overview_model
+from socialmgr.services import post_detail, read_models
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
@@ -46,6 +47,19 @@ def create_app(settings: Settings | None = None, web_dist: Path | None = WEB_DIS
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> read_models.PostsPage:
         return read_models.list_posts(session, settings, status=status, limit=limit, offset=offset)
+
+    @app.get("/api/posts/{post_id}", tags=["posts"], responses={404: {"description": "No such post"}})
+    def post(session: SessionDep, post_id: str) -> post_detail.PostDetail:
+        """One post: labels, frozen forecast, score and captures. Accepts `post:12` or `12`."""
+        raw = post_id.removeprefix("post:")
+        detail = post_detail.post_detail(session, settings, int(raw)) if raw.isdigit() else None
+        if detail is None:
+            raise HTTPException(status_code=404, detail=f"post {post_id} not found")
+        return detail
+
+    @app.get("/api/overview", tags=["overview"])
+    def overview(session: SessionDep) -> overview_model.Overview:
+        return overview_model.overview(session, settings)
 
     if web_dist is not None and (web_dist / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")

@@ -8,6 +8,8 @@ export interface PanelHeaderProps {
   showAction?: boolean;
   /** Link target for the action. */
   actionHref?: string;
+  /** Horizontal padding; false when the panel already pads its content. */
+  inset?: boolean;
   className?: string;
   style?: CSSProperties;
 }
@@ -19,11 +21,12 @@ export function PanelHeader({
   action,
   showAction = true,
   actionHref,
+  inset = true,
   className,
   style,
 }: PanelHeaderProps) {
   return (
-    <div className={cx("flex h-10 shrink-0 items-center gap-3 px-4 font-sans", className ?? "w-full")} style={style}>
+    <div className={cx("flex h-10 shrink-0 items-center gap-3 font-sans", inset && "px-4", className ?? "w-full")} style={style}>
       <span className="text-[13px] leading-normal font-medium whitespace-nowrap text-text">{title}</span>
       <span className="min-w-0 flex-1 truncate text-xs leading-normal text-faint">{subtitle}</span>
       {showAction && action && (
