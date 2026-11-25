@@ -292,7 +292,7 @@ def _write_protocol(
 def frozen_model_name(settings: Settings, plugins: ActivePlugins) -> tuple[str, str]:
     """(registry name, version tag) of the model a new protocol freezes: the current champion."""
     m, p = plugins.champion, plugins.prior_source
-    return settings.plugins.champion_model, f"{m.family}@{m.version}+{p.name}@{p.version}"
+    return plugins.champion_name, f"{m.family}@{m.version}+{p.name}@{p.version}"
 
 
 def frozen_plugins(settings: Settings, plugins: ActivePlugins, exp: Experiment) -> ActivePlugins:
@@ -305,7 +305,7 @@ def frozen_plugins(settings: Settings, plugins: ActivePlugins, exp: Experiment) 
             f"{exp.key}'s frozen model {exp.model_version} is no longer available (this install has {tag}). "
             "Amending the frozen model needs the owner's approval."
         )
-    return replace(plugins, champion=model)
+    return replace(plugins, champion=model, champion_name=exp.model_plugin, champion_pinned=True)
 
 
 # ---------------------------------------------------------------- approvals

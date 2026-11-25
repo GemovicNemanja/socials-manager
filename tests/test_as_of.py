@@ -27,7 +27,12 @@ def test_manifest_ignores_later_data(loaded: sessionmaker[Session]) -> None:
             post = session.get(Post, int(fc.subject.split(":")[1]))
             assert post is not None
             rebuilt = pipeline.build_manifest(session, fc.workspace_id, post)
-            frozen = {k: v for k, v in fc.input_manifest.items() if k not in ("model_version", "calibrated")}
+            assert rebuilt.pop("model_plugin") in (None, fc.input_manifest["model_plugin"])
+            frozen = {
+                k: v
+                for k, v in fc.input_manifest.items()
+                if k not in ("model_plugin", "model_version", "calibrated")
+            }
             assert rebuilt == frozen
             if frozen["cutoff"] is not None:
                 assert frozen["cutoff"] < post.created_at.isoformat()

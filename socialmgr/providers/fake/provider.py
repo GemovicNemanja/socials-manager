@@ -237,9 +237,7 @@ class FakeOwnerProvider(_FakeProvider):
     """Stands in for the official X API with the owner's credentials (owner + non-public metrics)."""
 
     name = "fake_owner"
-    capabilities = frozenset(
-        {Capability.OWNER_METRICS, Capability.PUBLIC_METRICS, Capability.FOLLOWER_LISTS}
-    )
+    capabilities = frozenset({Capability.OWNER_METRICS, Capability.PUBLIC_METRICS, Capability.FOLLOWER_LISTS})
     roles = frozenset({"owner"})
     impressions_source = "impression_count"
     owner_metrics = True

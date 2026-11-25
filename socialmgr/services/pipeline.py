@@ -30,6 +30,7 @@ from socialmgr.db.models import (
     Label,
     MaturityCurve,
     MetricSnapshot,
+    ModelReview,
     ModelVersion,
     PlannedSlot,
     Post,
@@ -607,6 +608,22 @@ def _model_version_row(
         )
 
 
+def champion_at(session: Session, workspace_id: int, cutoff: datetime | None) -> str | None:
+    """The champion's registry name after the last promotion review at or before ``cutoff``.
+
+    None when no review has run yet: the configured champion applies.
+    """
+    if cutoff is None:
+        return None
+    return session.scalar(
+        select(ModelReview.champion_after)
+        .join(Run, Run.id == ModelReview.run_id)
+        .where(ModelReview.workspace_id == workspace_id, Run.cutoff_at <= cutoff)
+        .order_by(Run.cutoff_at.desc(), ModelReview.id.desc())
+        .limit(1)
+    )
+
+
 def _manifest(
     session: Session,
     workspace_id: int,
@@ -647,6 +664,7 @@ def _manifest(
         "regime_id": regime_at(session, workspace_id, platform, created_at, cutoff),
         "subject": {**subject, "followers_at_post": followers or 0},
         "followers_source": followers_source,
+        "model_plugin": champion_at(session, workspace_id, cutoff),
         "training": [e.model_dump(mode="json") for e in examples],
         "seed": snapshot.id if snapshot else 0,
     }
@@ -726,7 +744,9 @@ def forecast_from_manifest(
     prior = plugins.prior_source.prior(
         PriorContext(platform="x", followers=subject.followers_at_post, owner_matured_posts=owner_n)
     )
-    fitted = plugins.champion.fit(training, prior, seed=int(manifest["seed"]))
+    # Manifests from before M3 name no model: they were all made by the configured champion.
+    model = plugins.model(manifest.get("model_plugin") or plugins.champion_name)
+    fitted = model.fit(training, prior, seed=int(manifest["seed"]))
     predicted = fitted.predict(subject)
     uses_owner = predicted.meta.get("uses_owner_data", "true") == "true"
     calibrated = uses_owner and owner_n >= OWNER_TERMS_MIN_POSTS
@@ -743,6 +763,12 @@ def freeze_forecast(
     now: datetime,
 ) -> Forecast:
     """Compute and freeze one forecast. Frozen rows are never edited (append-only triggers)."""
+    # The champion as of the manifest's snapshot (the latest promotion review by then), unless
+    # the caller pins one (an experiment's treatment-blind forecasts keep their frozen model).
+    name = (
+        plugins.champion_name if plugins.champion_pinned else manifest.get("model_plugin")
+    ) or plugins.champion_name
+    manifest = {**manifest, "model_plugin": name}
     version, calibrated, predicted = forecast_from_manifest(plugins, manifest)
     if not calibrated and kind == "as_of":
         kind = "prior_only_uncalibrated"
@@ -752,7 +778,7 @@ def freeze_forecast(
         session,
         settings.workspace_id,
         version,
-        plugins.champion.family,
+        plugins.model(name).family,
         plugins.prior_source.name,
         "champion",
     )

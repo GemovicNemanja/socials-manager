@@ -7,6 +7,7 @@ cumulative count between the two runs, or its whole count when the post first ap
 interval. The first run back-fills 30 days, so it opens the first interval rather than closing one.
 """
 
+import itertools
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -92,7 +93,7 @@ def run_intervals(session: Session, account_id: int, until: datetime | None = No
 
     intervals: list[RunInterval] = []
     last_seen: dict[int, tuple[int | None, int | None]] = dict(by_run.get(points[0][0], {}))
-    for (_, start, f0, _), (run_id, end, f1, gains) in zip(points, points[1:], strict=False):
+    for (_, start, f0, _), (run_id, end, f1, gains) in itertools.pairwise(points):
         impressions = 0
         clicks = 0
         clicks_seen = False
