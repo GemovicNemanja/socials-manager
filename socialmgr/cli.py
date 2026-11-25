@@ -34,12 +34,19 @@ def fixture(
     until: Annotated[
         str | None, typer.Option(help="Last run time, ISO UTC (default: today 06:00 UTC)")
     ] = None,
+    experiment_demo: Annotated[
+        bool,
+        typer.Option(
+            "--experiment-demo",
+            help="Test fixture: also run an E03 x E06 experiment over the last 3 weeks (end-to-end tests)",
+        ),
+    ] = False,
 ) -> None:
     """Load a deterministic fixture account by simulating daily runs over fake providers."""
     from sqlalchemy import select
 
     from socialmgr.db.models import Run
-    from socialmgr.services.fixtures import default_until, load_fixture
+    from socialmgr.services.fixtures import default_until, load_experiment_demo, load_fixture
     from socialmgr.services.plugins import load_plugins
 
     settings = _settings()
@@ -60,7 +67,8 @@ def fixture(
             raise typer.Exit(1)
     end = datetime.fromisoformat(until).astimezone(UTC) if until else default_until()
     with session_scope(session_factory(engine)) as session:
-        summary = load_fixture(session, settings, load_plugins(settings), until=end)
+        load = load_experiment_demo if experiment_demo else load_fixture
+        summary = load(session, settings, load_plugins(settings), until=end)
     typer.echo(
         f"Fixture loaded: {summary.runs} runs, {summary.posts} posts, "
         f"{summary.forecasts} forecasts, {summary.scores} scored"

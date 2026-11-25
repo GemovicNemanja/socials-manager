@@ -9,7 +9,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from socialmgr.core.config import Settings
-from socialmgr.db.models import Cost, Forecast, Label, MetricSnapshot, Post, Run, ScoreRow
+from socialmgr.db.models import (
+    Approval,
+    Cost,
+    Experiment,
+    Forecast,
+    Label,
+    MetricSnapshot,
+    Post,
+    Run,
+    ScoreRow,
+)
 from socialmgr.modelling import maturity, scoring
 from socialmgr.services.pipeline import (
     FORECAST_TYPES,
@@ -165,7 +175,22 @@ def shell(session: Session, settings: Settings, now: datetime | None = None) -> 
             spent_usd=round(float(spent or 0.0), 2),
             cap_usd=settings.monthly_cap_usd,
         ),
-        counts=ShellCounts(posts=posts or 0, experiments_running=0, approvals_pending=0),
+        counts=ShellCounts(
+            posts=posts or 0,
+            experiments_running=session.scalar(
+                select(func.count(Experiment.id)).where(
+                    Experiment.workspace_id == settings.workspace_id,
+                    Experiment.status.in_(("active", "scheduled", "paused")),
+                )
+            )
+            or 0,
+            approvals_pending=session.scalar(
+                select(func.count(Approval.id)).where(
+                    Approval.workspace_id == settings.workspace_id, Approval.status == "pending"
+                )
+            )
+            or 0,
+        ),
     )
 
 

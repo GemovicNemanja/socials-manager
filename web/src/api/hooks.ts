@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, unwrap } from "./client";
-import type { PlanRequest, PostsStatusFilter, RegisterRequest } from "./models";
+import type { PlanRequest, PostsStatusFilter, ProposeRequest, RegisterRequest, RegisterSlotsRequest } from "./models";
 
 export const PAGE_SIZE = 50;
 /** How often run status is polled while a run executes. */
@@ -15,7 +15,100 @@ export const queryKeys = {
   runStatus: ["runs", "status"] as const,
   schedule: ["planned"] as const,
   draft: (req: PlanRequest | null) => ["planned", "draft", req] as const,
+  experiments: ["experiments"] as const,
+  experiment: (key: string) => ["experiments", key] as const,
+  nextPosts: ["next-posts"] as const,
 };
+
+/** Running, waiting and concluded experiments, E01-E09 with power, pending approvals. */
+export function useExperiments() {
+  return useQuery({
+    queryKey: queryKeys.experiments,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/experiments", { signal })),
+    refetchInterval: 60_000,
+  });
+}
+
+/** One experiment: protocol, slots with arms, readouts, guardrails. Idle while key is null. */
+export function useExperiment(key: string | null) {
+  return useQuery({
+    queryKey: queryKeys.experiment(key ?? ""),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/experiments/{key}", { params: { path: { key: key! } }, signal })),
+    enabled: key != null,
+    retry: (count, error) => count < 1 && !(error instanceof ApiError && error.status === 404),
+  });
+}
+
+/** Registered slots and planned posts for the next days (Account, "Next posts"). */
+export function useNextPosts(days = 7) {
+  return useQuery({
+    queryKey: queryKeys.nextPosts,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/next-posts", { params: { query: { days } }, signal })),
+    refetchInterval: 60_000,
+  });
+}
+
+/** After any experiment write: experiments, next posts, the planned schedule and the shell count. */
+function useInvalidateExperiments() {
+  const client = useQueryClient();
+  return () => {
+    void client.invalidateQueries({ queryKey: queryKeys.experiments });
+    void client.invalidateQueries({ queryKey: queryKeys.nextPosts });
+    void client.invalidateQueries({ queryKey: queryKeys.schedule });
+    void client.invalidateQueries({ queryKey: queryKeys.shell });
+  };
+}
+
+/** Start a suggestion or a custom experiment as the owner. */
+export function useProposeExperiment() {
+  const invalidate = useInvalidateExperiments();
+  return useMutation({
+    mutationFn: (body: ProposeRequest) => unwrap(api.POST("/api/experiments", { body })),
+    onSuccess: invalidate,
+  });
+}
+
+/** Register whole days of slots: blind forecasts freeze, then arms are drawn. */
+export function useRegisterSlots() {
+  const invalidate = useInvalidateExperiments();
+  return useMutation({
+    mutationFn: (body: RegisterSlotsRequest) => unwrap(api.POST("/api/experiments/slots", { body })),
+    onSuccess: invalidate,
+  });
+}
+
+/** Approve or reject a pending item as the owner. */
+export function useDecideApproval() {
+  const invalidate = useInvalidateExperiments();
+  return useMutation({
+    mutationFn: ({ id, decision, note }: { id: number; decision: "approve" | "reject"; note?: string }) => {
+      const params = { path: { approval_id: id } };
+      const body = note ? { note } : undefined;
+      return unwrap(
+        decision === "approve"
+          ? api.POST("/api/approvals/{approval_id}/approve", { params, body })
+          : api.POST("/api/approvals/{approval_id}/reject", { params, body }),
+      );
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Stop an experiment for good, or take its one extension. */
+export function useExperimentAction() {
+  const invalidate = useInvalidateExperiments();
+  return useMutation({
+    mutationFn: ({ key, action, reason }: { key: string; action: "stop" | "extend"; reason?: string }) => {
+      const params = { path: { key } };
+      return unwrap(
+        action === "stop"
+          ? api.POST("/api/experiments/{key}/stop", { params, body: { reason: reason ?? "stopped by the owner" } })
+          : api.POST("/api/experiments/{key}/extend", { params }),
+      );
+    },
+    onSuccess: invalidate,
+  });
+}
 
 /** The latest run's briefing: summary, notable posts, caveats and spend. */
 export function useBriefing() {
@@ -79,6 +172,7 @@ export function useRegisterPlanned() {
       if (data.registered) {
         void client.invalidateQueries({ queryKey: queryKeys.schedule });
         void client.invalidateQueries({ queryKey: queryKeys.overview });
+        void client.invalidateQueries({ queryKey: queryKeys.nextPosts });
       }
     },
   });

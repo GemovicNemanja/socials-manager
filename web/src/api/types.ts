@@ -200,10 +200,296 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Experiments
+         * @description Running, waiting and concluded experiments, E01-E09 with power previews, pending approvals.
+         */
+        get: operations["experiments_api_experiments_get"];
+        put?: never;
+        /**
+         * Propose
+         * @description Start a suggestion or a custom experiment as the owner: scheduled directly, or a pending
+         *     approval for MODEL §6.9's owner items (horizons over 8 weeks, a 4th concurrent experiment).
+         */
+        post: operations["propose_api_experiments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Slots
+         * @description Register whole local days (up to 7 ahead) for every scheduled or active experiment.
+         *     Each slot's treatment-blind forecast is frozen before its arms are drawn.
+         */
+        post: operations["register_slots_api_experiments_slots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Experiment
+         * @description Protocol, slots with arms and blind ranges, readouts, guardrails, deviations, e-LOND.
+         */
+        get: operations["experiment_api_experiments__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{key}/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Slots For
+         * @description Register whole days for this experiment only (other running experiments draw nothing
+         *     on these days; use ``POST /api/experiments/slots`` to run them as a factorial).
+         */
+        post: operations["register_slots_for_api_experiments__key__slots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{key}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop
+         * @description Stop for good: planned treated slots revert to control and no e-value is emitted.
+         */
+        post: operations["stop_api_experiments__key__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{key}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extend
+         * @description MODEL §6.3's one extension of up to 50% (past 8 weeks it becomes a pending approval).
+         */
+        post: operations["extend_api_experiments__key__extend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Approvals */
+        get: operations["approvals_api_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{approval_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve
+         * @description The owner approves a pending item. No MCP tool can reach this.
+         */
+        post: operations["approve_api_approvals__approval_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{approval_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject */
+        post: operations["reject_api_approvals__approval_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/next-posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Next Posts
+         * @description Registered slots and planned posts for the next days, with arm instructions and frozen ranges.
+         */
+        get: operations["next_posts_api_next_posts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ApprovalCardOut */
+        ApprovalCardOut: {
+            /** Id */
+            id: string;
+            /** Approval Id */
+            approval_id: number;
+            /** Kind */
+            kind: string;
+            /** Experiment */
+            experiment: string | null;
+            /** Title */
+            title: string;
+            /** Detail */
+            detail: string;
+            /** Reasons */
+            reasons: string[];
+            /** Requested By */
+            requested_by: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+            /** Decided By */
+            decided_by: string | null;
+            /** Decided At */
+            decided_at: string | null;
+            /** Note */
+            note: string | null;
+        };
+        /** ArmOut */
+        ArmOut: {
+            /** Experiment */
+            experiment: string;
+            /** Factor */
+            factor: string;
+            /** Lever */
+            lever: string;
+            /**
+             * Arm
+             * @enum {string}
+             */
+            arm: "treatment" | "control";
+            /** Value */
+            value: string;
+            /** Instruction */
+            instruction: string;
+            /** Measured */
+            measured: boolean;
+            /** Reverted */
+            reverted: boolean;
+        };
+        /** ArmOutcomeCountsOut */
+        ArmOutcomeCountsOut: {
+            /**
+             * Above
+             * @default 0
+             */
+            above: number;
+            /**
+             * As Expected
+             * @default 0
+             */
+            as_expected: number;
+            /**
+             * Below
+             * @default 0
+             */
+            below: number;
+            /**
+             * Awaiting
+             * @default 0
+             */
+            awaiting: number;
+            /**
+             * Lost
+             * @default 0
+             */
+            lost: number;
+        };
         /**
          * BriefingData
          * @description The structured part of a run briefing (services/briefing.py ``build``).
@@ -303,12 +589,112 @@ export interface components {
             /** Q90 */
             q90: number;
         };
+        /**
+         * CustomSpecIn
+         * @description A one-factor per-post experiment written by the owner.
+         */
+        CustomSpecIn: {
+            /** Name */
+            name: string;
+            /** Hypothesis */
+            hypothesis: string;
+            /**
+             * Lever
+             * @enum {string}
+             */
+            lever: "format" | "media" | "link_placement" | "hook" | "cta" | "content_kind" | "topic_ordering" | "quote" | "thread_vs_long";
+            /** Control */
+            control: string;
+            /** Treatment */
+            treatment: string;
+            /**
+             * Horizon Weeks
+             * @default 4
+             */
+            horizon_weeks: number;
+        };
         /** DataSufficiency */
         DataSufficiency: {
             /** Owner N */
             owner_n: number;
             /** Reason */
             reason: string | null;
+        };
+        /**
+         * DayPlan
+         * @description One whole local day of slots. ``treatment_slots`` is for switchbacks whose lever changes the
+         *     slots themselves (posting window, frequency): the day's drawn condition picks the list.
+         */
+        DayPlan: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Slots */
+            slots: components["schemas"]["SlotSpec"][];
+            /** Treatment Slots */
+            treatment_slots?: components["schemas"]["SlotSpec"][] | null;
+        };
+        /** DecideIn */
+        DecideIn: {
+            /** Note */
+            note?: string | null;
+        };
+        /** DecideOut */
+        DecideOut: {
+            /** Done */
+            done: boolean;
+            /** Summary */
+            summary: string;
+            approval: components["schemas"]["ApprovalCardOut"] | null;
+        };
+        /** DeviationRowOut */
+        DeviationRowOut: {
+            /** Slot */
+            slot: string | null;
+            /** Factor */
+            factor: string;
+            /** Kind */
+            kind: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ELondEntryOut */
+        ELondEntryOut: {
+            /** Factor */
+            factor: string;
+            /** T */
+            t: number;
+            /** E Value */
+            e_value: number;
+            /** Alpha T */
+            alpha_t: number;
+            /** Rejected */
+            rejected: boolean;
+        };
+        /** ELondStatusOut */
+        ELondStatusOut: {
+            /**
+             * Tests
+             * @default 0
+             */
+            tests: number;
+            /**
+             * Rejections
+             * @default 0
+             */
+            rejections: number;
+            /**
+             * Alpha
+             * @default 0.1
+             */
+            alpha: number;
         };
         /**
          * ExpectedRange
@@ -332,6 +718,258 @@ export interface components {
             n_posts: number;
             /** Method */
             method: string;
+        };
+        /** ExperimentActionOut */
+        ExperimentActionOut: {
+            /** Done */
+            done: boolean;
+            /** Summary */
+            summary: string;
+            experiment: components["schemas"]["ExperimentSummaryOut"] | null;
+            approval: components["schemas"]["ApprovalCardOut"] | null;
+        };
+        /** ExperimentDetailOut */
+        ExperimentDetailOut: {
+            /** Summary */
+            summary: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "solid" | "suggestive" | "too early";
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Regime Id */
+            regime_id: number | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats?: string[];
+            experiment: components["schemas"]["ExperimentSummaryOut"] | null;
+            /** Tz */
+            tz: string;
+            readout: components["schemas"]["ReadoutViewOut"] | null;
+            /** Readouts */
+            readouts: components["schemas"]["ReadoutViewOut"][];
+            /** Slots */
+            slots: components["schemas"]["SlotRowOut"][];
+            /** Past */
+            past: components["schemas"]["FactorPastOut"][];
+            /** Approvals */
+            approvals: components["schemas"]["ApprovalCardOut"][];
+            /** Deviations */
+            deviations: components["schemas"]["DeviationRowOut"][];
+            /** Elond */
+            elond: components["schemas"]["ELondEntryOut"][];
+            /** Protocol Versions */
+            protocol_versions: components["schemas"]["ProtocolVersionOut"][];
+            /** Seed */
+            seed: number | null;
+            /** Frozen Forecaster */
+            frozen_forecaster: string | null;
+        };
+        /** ExperimentSummaryOut */
+        ExperimentSummaryOut: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Hypothesis */
+            hypothesis: string;
+            /**
+             * Design
+             * @enum {string}
+             */
+            design: "per_post" | "switchback";
+            /** Design Label */
+            design_label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "pending_approval" | "scheduled" | "active" | "paused" | "concluded" | "stopped";
+            /** Status Label */
+            status_label: string;
+            /**
+             * Status Tone
+             * @enum {string}
+             */
+            status_tone: "default" | "warn" | "positive" | "negative" | "accent";
+            /** Factors */
+            factors: components["schemas"]["FactorOut"][];
+            /** Primary Metric */
+            primary_metric: string;
+            /** Primary Metric Label */
+            primary_metric_label: string;
+            /** Delta Ratio */
+            delta_ratio: number;
+            /** Horizon Weeks */
+            horizon_weeks: number;
+            /** Weeks Total */
+            weeks_total: number;
+            /** Week */
+            week: number | null;
+            /** Created By */
+            created_by: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at: string | null;
+            /** Horizon End */
+            horizon_end: string | null;
+            /** Concluded At */
+            concluded_at: string | null;
+            /** Slots Assigned */
+            slots_assigned: number;
+            /** Posts Matured */
+            posts_matured: number;
+            next_look: components["schemas"]["NextLookOut"] | null;
+            /** Latest Look */
+            latest_look: string | null;
+            /** Effect Ratio */
+            effect_ratio: number | null;
+            /** Effect Interval80 */
+            effect_interval80: number[] | null;
+            /** Effect Text */
+            effect_text: string;
+            /** Outcome */
+            outcome: string | null;
+            /** Paused Arms */
+            paused_arms: components["schemas"]["PausedArmOut"][];
+            /** Pause Reason */
+            pause_reason: string | null;
+            /**
+             * Extension Used
+             * @default false
+             */
+            extension_used: boolean;
+            /**
+             * Extension Offered
+             * @default false
+             */
+            extension_offered: boolean;
+            /**
+             * Pending Approvals
+             * @default 0
+             */
+            pending_approvals: number;
+        };
+        /** ExperimentsOut */
+        ExperimentsOut: {
+            /** Summary */
+            summary: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "solid" | "suggestive" | "too early";
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Regime Id */
+            regime_id: number | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats?: string[];
+            /** Running */
+            running: components["schemas"]["ExperimentSummaryOut"][];
+            /** Waiting */
+            waiting: components["schemas"]["ExperimentSummaryOut"][];
+            /** Concluded */
+            concluded: components["schemas"]["ExperimentSummaryOut"][];
+            /** Suggestions */
+            suggestions: components["schemas"]["SuggestionCardOut"][];
+            /** Approvals */
+            approvals: components["schemas"]["ApprovalCardOut"][];
+            elond: components["schemas"]["ELondStatusOut"];
+            /** Posts Per Week */
+            posts_per_week: number;
+            /** Tz */
+            tz: string;
+        };
+        /** FactorOut */
+        FactorOut: {
+            /** Name */
+            name: string;
+            /** Lever */
+            lever: string;
+            /** Lever Label */
+            lever_label: string;
+            /** Control */
+            control: string;
+            /** Treatment */
+            treatment: string;
+            /** Applies To */
+            applies_to: string;
+        };
+        /**
+         * FactorPastOut
+         * @description How the factor's posts landed against their frozen treatment-blind forecasts (plan §6).
+         */
+        FactorPastOut: {
+            /** Factor */
+            factor: string;
+            /** Treatment */
+            treatment: string;
+            /** Control */
+            control: string;
+            treated: components["schemas"]["ArmOutcomeCountsOut"];
+            controls: components["schemas"]["ArmOutcomeCountsOut"];
+        };
+        /** FactorReadoutOut */
+        FactorReadoutOut: {
+            /** Factor */
+            factor: string;
+            /** Lever */
+            lever: string;
+            /** Control */
+            control: string;
+            /** Treatment */
+            treatment: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "adopt" | "reject" | "near_threshold" | "continue";
+            /** Label */
+            label: string;
+            /** Headline */
+            headline: string;
+            /** Reason */
+            reason: string;
+            /** Decided At Look */
+            decided_at_look: string | null;
+            /** Effect Ratio */
+            effect_ratio: number | null;
+            /** Interval80 */
+            interval80: number[] | null;
+            /** P Gt Delta */
+            p_gt_delta: number | null;
+            /** P Lt Zero */
+            p_lt_zero: number | null;
+            /** Expected Loss */
+            expected_loss: number | null;
+            /** N Treated */
+            n_treated: number;
+            /** N Control */
+            n_control: number;
+            /** Randomization P */
+            randomization_p: number | null;
+            /** Disagrees With Randomization Test */
+            disagrees_with_randomization_test: boolean;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Elond */
+            elond: string;
+            /** E Value */
+            e_value: number | null;
         };
         /** FollowerPoint */
         FollowerPoint: {
@@ -459,6 +1097,15 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HealthCheckOut */
+        HealthCheckOut: {
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+            /** Detail */
+            detail: string;
+        };
         /** I48 */
         I48: {
             /** Value */
@@ -486,6 +1133,29 @@ export interface components {
             matches: string;
             /** Similarity */
             similarity: number;
+        };
+        /** NextLookOut */
+        NextLookOut: {
+            /** Look */
+            look: string;
+            /**
+             * After
+             * Format: date-time
+             */
+            after: string;
+        };
+        /** NextPostsOut */
+        NextPostsOut: {
+            /** Tz */
+            tz: string;
+            /** Days */
+            days: number;
+            /** Slots */
+            slots: components["schemas"]["SlotRowOut"][];
+            /** Drawing */
+            drawing: string[];
+            /** Registered Days */
+            registered_days: string[];
         };
         /** NotablePost */
         NotablePost: {
@@ -568,6 +1238,15 @@ export interface components {
             follows_per_1k_7d: components["schemas"]["RatioKpi"];
             visit_to_follow_7d: components["schemas"]["RatioKpi"];
             posts_7d: components["schemas"]["Kpi"];
+        };
+        /** PausedArmOut */
+        PausedArmOut: {
+            /** Factor */
+            factor: string;
+            /** At */
+            at: string | null;
+            /** Detail */
+            detail: string;
         };
         /** PendingAreaInfo */
         PendingAreaInfo: {
@@ -735,6 +1414,53 @@ export interface components {
             /** Items */
             items: components["schemas"]["PostItem"][];
         };
+        /**
+         * PowerPreviewOut
+         * @description MODEL §6.8's three numbers at the account's posting rate.
+         */
+        PowerPreviewOut: {
+            /** Posts Per Day */
+            posts_per_day: number;
+            /** N Posts */
+            n_posts: number;
+            /** Power 125 */
+            power_125: number | null;
+            /** Power 15 */
+            power_15: number | null;
+            /** Power 2 */
+            power_2: number | null;
+            /** Mde Ratio 80 */
+            mde_ratio_80: number | null;
+            /** Text */
+            text: string;
+            /** Note */
+            note: string;
+        };
+        /**
+         * ProposeIn
+         * @description Start one of E01-E09 (``suggestion``) or a custom experiment (``custom``), as the owner.
+         */
+        ProposeIn: {
+            /** Suggestion */
+            suggestion?: string | null;
+            custom?: components["schemas"]["CustomSpecIn"] | null;
+        };
+        /** ProtocolVersionOut */
+        ProtocolVersionOut: {
+            /** Version */
+            version: number;
+            /** Hash */
+            hash: string;
+            /** Created By */
+            created_by: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Reason */
+            reason: string;
+        };
         /** Quantiles */
         Quantiles: {
             /** Q05 */
@@ -760,6 +1486,32 @@ export interface components {
             numerator: number | null;
             /** Denominator */
             denominator: number | null;
+        };
+        /** ReadoutViewOut */
+        ReadoutViewOut: {
+            /** Id */
+            id: string;
+            /** Look */
+            look: string;
+            /** Experiment Week */
+            experiment_week: number;
+            /** Final */
+            final: boolean;
+            /** Decision */
+            decision: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Protocol Version */
+            protocol_version: number;
+            /** Factors */
+            factors: components["schemas"]["FactorReadoutOut"][];
+            /** Health */
+            health: components["schemas"]["HealthCheckOut"][];
+            /** Health Ok */
+            health_ok: boolean;
         };
         /** RegisterIn */
         RegisterIn: {
@@ -790,6 +1542,28 @@ export interface components {
              * @default false
              */
             accept_warnings: boolean;
+        };
+        /**
+         * RegisterSlotsIn
+         * @description Whole local days, each with its slot times (local, the account's zone) and optional labels
+         *     such as ``content_kind=demo`` or ``link_post=true`` that factors filter on.
+         */
+        RegisterSlotsIn: {
+            /** Days */
+            days: components["schemas"]["DayPlan"][];
+        };
+        /** RegisterSlotsOut */
+        RegisterSlotsOut: {
+            /** Registered */
+            registered: boolean;
+            /** Summary */
+            summary: string;
+            /** Experiments */
+            experiments: string[];
+            /** Warnings */
+            warnings: string[];
+            /** Slots */
+            slots: components["schemas"]["SlotRowOut"][];
         };
         /** RunFailure */
         RunFailure: {
@@ -1015,6 +1789,77 @@ export interface components {
             /** Forecast Q90 */
             forecast_q90: number | null;
         };
+        /** SlotRowOut */
+        SlotRowOut: {
+            /** Slot */
+            slot: string;
+            /**
+             * Planned At
+             * Format: date-time
+             */
+            planned_at: string;
+            /** Planned Local */
+            planned_local: string;
+            /** Post Type */
+            post_type: string;
+            /** Labels */
+            labels: {
+                [key: string]: string;
+            };
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "planned" | "posted" | "missed" | "cancelled";
+            /** Experiment Slot */
+            experiment_slot: boolean;
+            /** Text */
+            text: string | null;
+            /** Arms */
+            arms: components["schemas"]["ArmOut"][];
+            /** Instructions */
+            instructions: string;
+            /** Forecast */
+            forecast: string | null;
+            /** Forecast Kind */
+            forecast_kind: string | null;
+            /** Forecast Q10 */
+            forecast_q10: number | null;
+            /** Forecast Q50 */
+            forecast_q50: number | null;
+            /** Forecast Q90 */
+            forecast_q90: number | null;
+            /** Forecast Frozen At */
+            forecast_frozen_at: string | null;
+            /** Matched Post */
+            matched_post: string | null;
+            /** Outcome I48 */
+            outcome_i48: number | null;
+            /** Pit */
+            pit: number | null;
+            /**
+             * Outcome Status
+             * @enum {string}
+             */
+            outcome_status: "above" | "as_expected" | "below" | "awaiting" | "planned" | "missed" | "cancelled";
+        };
+        /** SlotSpec */
+        SlotSpec: {
+            /**
+             * Time
+             * Format: time
+             */
+            time: string;
+            /**
+             * Post Type
+             * @default original
+             */
+            post_type: string;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            };
+        };
         /** SnapshotPoint */
         SnapshotPoint: {
             /** Run Id */
@@ -1083,6 +1928,45 @@ export interface components {
             status: string;
             /** Error */
             error?: string | null;
+        };
+        /** StopIn */
+        StopIn: {
+            /** Reason */
+            reason: string;
+        };
+        /** SuggestionCardOut */
+        SuggestionCardOut: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Hypothesis */
+            hypothesis: string;
+            /** Mechanism */
+            mechanism: string;
+            /**
+             * Design
+             * @enum {string}
+             */
+            design: "per_post" | "switchback";
+            /** Design Label */
+            design_label: string;
+            factor: components["schemas"]["FactorOut"];
+            /** Primary Metric Label */
+            primary_metric_label: string;
+            /** Horizon Weeks */
+            horizon_weeks: number;
+            /** Horizon Text */
+            horizon_text: string;
+            /** Detectability */
+            detectability: string;
+            /** Note */
+            note: string;
+            power: components["schemas"]["PowerPreviewOut"];
+            /** Already Running */
+            already_running: boolean;
+            /** Needs Owner Because */
+            needs_owner_because: string[];
         };
         /** UpcomingSlot */
         UpcomingSlot: {
@@ -1401,6 +2285,377 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    experiments_api_experiments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentsOut"];
+                };
+            };
+        };
+    };
+    propose_api_experiments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentActionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_slots_api_experiments_slots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterSlotsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterSlotsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    experiment_api_experiments__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentDetailOut"];
+                };
+            };
+            /** @description No such experiment */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_slots_for_api_experiments__key__slots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterSlotsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterSlotsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_api_experiments__key__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StopIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentActionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extend_api_experiments__key__extend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentActionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approvals_api_approvals_get: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalCardOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_api_approvals__approval_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DecideIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecideOut"];
+                };
+            };
+            /** @description No such approval */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_api_approvals__approval_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DecideIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecideOut"];
+                };
+            };
+            /** @description No such approval */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    next_posts_api_next_posts_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextPostsOut"];
+                };
             };
             /** @description Validation Error */
             422: {
