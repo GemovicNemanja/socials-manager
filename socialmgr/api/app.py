@@ -15,7 +15,7 @@ from socialmgr.api import schemas
 from socialmgr.core.config import Settings
 from socialmgr.db.session import make_engine, session_factory
 from socialmgr.modelling.regimes import Fetcher, github_fetcher
-from socialmgr.services import agent, post_detail, read_models
+from socialmgr.services import agent, experiment_views, post_detail, read_models
 from socialmgr.services import overview as overview_model
 from socialmgr.services.plugins import ActivePlugins, load_plugins
 
@@ -156,6 +156,95 @@ def create_app(
         return agent.register_planned_post(
             session, settings, active_plugins(), body.to_request(), body.accept_warnings
         )
+
+    # ------------------------------------------------------------ experiments (M2), as the owner
+
+    @app.get("/api/experiments", tags=["experiments"])
+    def experiments(session: SessionDep) -> schemas.ExperimentsOut:
+        """Running, waiting and concluded experiments, E01-E09 with power previews, pending approvals."""
+        return experiment_views.experiments_overview(session, settings)
+
+    @app.post("/api/experiments", tags=["experiments"])
+    def propose(session: SessionDep, body: schemas.ProposeIn) -> schemas.ExperimentActionOut:
+        """Start a suggestion or a custom experiment as the owner: scheduled directly, or a pending
+        approval for MODEL §6.9's owner items (horizons over 8 weeks, a 4th concurrent experiment)."""
+        return experiment_views.propose(session, settings, active_plugins(), body)
+
+    @app.post("/api/experiments/slots", tags=["experiments"])
+    def register_slots(session: SessionDep, body: schemas.RegisterSlotsIn) -> schemas.RegisterSlotsOut:
+        """Register whole local days (up to 7 ahead) for every scheduled or active experiment.
+        Each slot's treatment-blind forecast is frozen before its arms are drawn."""
+        return experiment_views.register_slots(session, settings, active_plugins(), body.days)
+
+    @app.get(
+        "/api/experiments/{key}", tags=["experiments"], responses={404: {"description": "No such experiment"}}
+    )
+    def experiment(session: SessionDep, key: str) -> schemas.ExperimentDetailOut:
+        """Protocol, slots with arms and blind ranges, readouts, guardrails, deviations, e-LOND."""
+        detail = experiment_views.experiment_detail(session, settings, key)
+        if detail is None:
+            raise HTTPException(status_code=404, detail=f"experiment {key} not found")
+        return detail
+
+    @app.post("/api/experiments/{key}/slots", tags=["experiments"])
+    def register_slots_for(
+        session: SessionDep, key: str, body: schemas.RegisterSlotsIn
+    ) -> schemas.RegisterSlotsOut:
+        """Register whole days for this experiment only (other running experiments draw nothing
+        on these days; use ``POST /api/experiments/slots`` to run them as a factorial)."""
+        return experiment_views.register_slots(session, settings, active_plugins(), body.days, keys=[key])
+
+    @app.post("/api/experiments/{key}/stop", tags=["experiments"])
+    def stop(session: SessionDep, key: str, body: schemas.StopIn) -> schemas.ExperimentActionOut:
+        """Stop for good: planned treated slots revert to control and no e-value is emitted."""
+        return experiment_views.stop(session, settings, key, body.reason)
+
+    @app.post("/api/experiments/{key}/extend", tags=["experiments"])
+    def extend(session: SessionDep, key: str) -> schemas.ExperimentActionOut:
+        """MODEL §6.3's one extension of up to 50% (past 8 weeks it becomes a pending approval)."""
+        return experiment_views.extend(session, settings, key)
+
+    @app.get("/api/approvals", tags=["experiments"])
+    def approvals(
+        session: SessionDep, status: Literal["pending", "approved", "rejected", "all"] = "pending"
+    ) -> list[schemas.ApprovalCardOut]:
+        return experiment_views.approvals_list(session, settings, None if status == "all" else status)
+
+    def _decide(
+        session: Session, approval_id: int, decision: str, body: schemas.DecideIn | None
+    ) -> schemas.DecideOut:
+        out = experiment_views.decide(
+            session, settings, active_plugins(), approval_id, decision, body.note if body else None
+        )
+        if out.approval is None:
+            raise HTTPException(status_code=404, detail=f"approval {approval_id} not found")
+        return out
+
+    @app.post(
+        "/api/approvals/{approval_id}/approve",
+        tags=["experiments"],
+        responses={404: {"description": "No such approval"}},
+    )
+    def approve(
+        session: SessionDep, approval_id: int, body: schemas.DecideIn | None = None
+    ) -> schemas.DecideOut:
+        """The owner approves a pending item. No MCP tool can reach this."""
+        return _decide(session, approval_id, "approve", body)
+
+    @app.post(
+        "/api/approvals/{approval_id}/reject",
+        tags=["experiments"],
+        responses={404: {"description": "No such approval"}},
+    )
+    def reject(
+        session: SessionDep, approval_id: int, body: schemas.DecideIn | None = None
+    ) -> schemas.DecideOut:
+        return _decide(session, approval_id, "reject", body)
+
+    @app.get("/api/next-posts", tags=["experiments"])
+    def next_posts(session: SessionDep, days: Annotated[int, Query(ge=1, le=14)] = 7) -> schemas.NextPostsOut:
+        """Registered slots and planned posts for the next days, with arm instructions and frozen ranges."""
+        return experiment_views.next_posts(session, settings, days)
 
     if web_dist is not None and (web_dist / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")

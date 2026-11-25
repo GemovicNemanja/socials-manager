@@ -388,10 +388,734 @@
           }
         }
       }
+    },
+    "/api/experiments": {
+      "get": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Experiments",
+        "description": "Running, waiting and concluded experiments, E01-E09 with power previews, pending approvals.",
+        "operationId": "experiments_api_experiments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentsOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Propose",
+        "description": "Start a suggestion or a custom experiment as the owner: scheduled directly, or a pending\napproval for MODEL \u00a76.9's owner items (horizons over 8 weeks, a 4th concurrent experiment).",
+        "operationId": "propose_api_experiments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentActionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/slots": {
+      "post": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Register Slots",
+        "description": "Register whole local days (up to 7 ahead) for every scheduled or active experiment.\nEach slot's treatment-blind forecast is frozen before its arms are drawn.",
+        "operationId": "register_slots_api_experiments_slots_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterSlotsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterSlotsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{key}": {
+      "get": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Experiment",
+        "description": "Protocol, slots with arms and blind ranges, readouts, guardrails, deviations, e-LOND.",
+        "operationId": "experiment_api_experiments__key__get",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentDetailOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such experiment"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{key}/slots": {
+      "post": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Register Slots For",
+        "description": "Register whole days for this experiment only (other running experiments draw nothing\non these days; use ``POST /api/experiments/slots`` to run them as a factorial).",
+        "operationId": "register_slots_for_api_experiments__key__slots_post",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterSlotsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterSlotsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{key}/stop": {
+      "post": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Stop",
+        "description": "Stop for good: planned treated slots revert to control and no e-value is emitted.",
+        "operationId": "stop_api_experiments__key__stop_post",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentActionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{key}/extend": {
+      "post": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Extend",
+        "description": "MODEL \u00a76.3's one extension of up to 50% (past 8 weeks it becomes a pending approval).",
+        "operationId": "extend_api_experiments__key__extend_post",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentActionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Approvals",
+        "operationId": "approvals_api_approvals_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "all"
+              ],
+              "type": "string",
+              "default": "pending",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApprovalCardOut"
+                  },
+                  "title": "Response Approvals Api Approvals Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/approvals/{approval_id}/approve": {
+      "post": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Approve",
+        "description": "The owner approves a pending item. No MCP tool can reach this.",
+        "operationId": "approve_api_approvals__approval_id__approve_post",
+        "parameters": [
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Approval Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DecideIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such approval"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/approvals/{approval_id}/reject": {
+      "post": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Reject",
+        "operationId": "reject_api_approvals__approval_id__reject_post",
+        "parameters": [
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Approval Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DecideIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such approval"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/next-posts": {
+      "get": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Next Posts",
+        "description": "Registered slots and planned posts for the next days, with arm instructions and frozen ranges.",
+        "operationId": "next_posts_api_next_posts_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 14,
+              "minimum": 1,
+              "default": 7,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextPostsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ApprovalCardOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "approval_id": {
+            "type": "integer",
+            "title": "Approval Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "experiment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experiment"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Requested At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "approval_id",
+          "kind",
+          "experiment",
+          "title",
+          "detail",
+          "reasons",
+          "requested_by",
+          "requested_at",
+          "status",
+          "decided_by",
+          "decided_at",
+          "note"
+        ],
+        "title": "ApprovalCardOut"
+      },
+      "ArmOut": {
+        "properties": {
+          "experiment": {
+            "type": "string",
+            "title": "Experiment"
+          },
+          "factor": {
+            "type": "string",
+            "title": "Factor"
+          },
+          "lever": {
+            "type": "string",
+            "title": "Lever"
+          },
+          "arm": {
+            "type": "string",
+            "enum": [
+              "treatment",
+              "control"
+            ],
+            "title": "Arm"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "instruction": {
+            "type": "string",
+            "title": "Instruction"
+          },
+          "measured": {
+            "type": "boolean",
+            "title": "Measured"
+          },
+          "reverted": {
+            "type": "boolean",
+            "title": "Reverted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "experiment",
+          "factor",
+          "lever",
+          "arm",
+          "value",
+          "instruction",
+          "measured",
+          "reverted"
+        ],
+        "title": "ArmOut"
+      },
+      "ArmOutcomeCountsOut": {
+        "properties": {
+          "above": {
+            "type": "integer",
+            "title": "Above",
+            "default": 0
+          },
+          "as_expected": {
+            "type": "integer",
+            "title": "As Expected",
+            "default": 0
+          },
+          "below": {
+            "type": "integer",
+            "title": "Below",
+            "default": 0
+          },
+          "awaiting": {
+            "type": "integer",
+            "title": "Awaiting",
+            "default": 0
+          },
+          "lost": {
+            "type": "integer",
+            "title": "Lost",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "above",
+          "as_expected",
+          "below",
+          "awaiting",
+          "lost"
+        ],
+        "title": "ArmOutcomeCountsOut"
+      },
       "BriefingData": {
         "properties": {
           "run_id": {
@@ -699,6 +1423,67 @@
         "title": "CurvePoint",
         "description": "The frozen 48h forecast mapped to an earlier or later age with the forecast's maturity curve."
       },
+      "CustomSpecIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "hypothesis": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Hypothesis"
+          },
+          "lever": {
+            "type": "string",
+            "enum": [
+              "format",
+              "media",
+              "link_placement",
+              "hook",
+              "cta",
+              "content_kind",
+              "topic_ordering",
+              "quote",
+              "thread_vs_long"
+            ],
+            "title": "Lever"
+          },
+          "control": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Control"
+          },
+          "treatment": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Treatment"
+          },
+          "horizon_weeks": {
+            "type": "number",
+            "maximum": 52.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Horizon Weeks",
+            "default": 4.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "hypothesis",
+          "lever",
+          "control",
+          "treatment"
+        ],
+        "title": "CustomSpecIn",
+        "description": "A one-factor per-post experiment written by the owner."
+      },
       "DataSufficiency": {
         "properties": {
           "owner_n": {
@@ -723,6 +1508,191 @@
           "reason"
         ],
         "title": "DataSufficiency"
+      },
+      "DayPlan": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotSpec"
+            },
+            "type": "array",
+            "title": "Slots"
+          },
+          "treatment_slots": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SlotSpec"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Treatment Slots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "slots"
+        ],
+        "title": "DayPlan",
+        "description": "One whole local day of slots. ``treatment_slots`` is for switchbacks whose lever changes the\nslots themselves (posting window, frequency): the day's drawn condition picks the list."
+      },
+      "DecideIn": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DecideIn"
+      },
+      "DecideOut": {
+        "properties": {
+          "done": {
+            "type": "boolean",
+            "title": "Done"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalCardOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "done",
+          "summary",
+          "approval"
+        ],
+        "title": "DecideOut"
+      },
+      "DeviationRowOut": {
+        "properties": {
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          },
+          "factor": {
+            "type": "string",
+            "title": "Factor"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot",
+          "factor",
+          "kind",
+          "detail",
+          "created_at"
+        ],
+        "title": "DeviationRowOut"
+      },
+      "ELondEntryOut": {
+        "properties": {
+          "factor": {
+            "type": "string",
+            "title": "Factor"
+          },
+          "t": {
+            "type": "integer",
+            "title": "T"
+          },
+          "e_value": {
+            "type": "number",
+            "title": "E Value"
+          },
+          "alpha_t": {
+            "type": "number",
+            "title": "Alpha T"
+          },
+          "rejected": {
+            "type": "boolean",
+            "title": "Rejected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "factor",
+          "t",
+          "e_value",
+          "alpha_t",
+          "rejected"
+        ],
+        "title": "ELondEntryOut"
+      },
+      "ELondStatusOut": {
+        "properties": {
+          "tests": {
+            "type": "integer",
+            "title": "Tests",
+            "default": 0
+          },
+          "rejections": {
+            "type": "integer",
+            "title": "Rejections",
+            "default": 0
+          },
+          "alpha": {
+            "type": "number",
+            "title": "Alpha",
+            "default": 0.1
+          }
+        },
+        "type": "object",
+        "required": [
+          "tests",
+          "rejections",
+          "alpha"
+        ],
+        "title": "ELondStatusOut"
       },
       "ExpectedRange": {
         "properties": {
@@ -772,6 +1742,880 @@
         ],
         "title": "ExpectedRange",
         "description": "The 10/50/90% quantiles of a KPI's predictive distribution and where the actual landed."
+      },
+      "ExperimentActionOut": {
+        "properties": {
+          "done": {
+            "type": "boolean",
+            "title": "Done"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "experiment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExperimentSummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalCardOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "done",
+          "summary",
+          "experiment",
+          "approval"
+        ],
+        "title": "ExperimentActionOut"
+      },
+      "ExperimentDetailOut": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "suggestive",
+              "too early"
+            ],
+            "title": "Confidence"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "regime_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Id"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "experiment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExperimentSummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tz": {
+            "type": "string",
+            "title": "Tz"
+          },
+          "readout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadoutViewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readouts": {
+            "items": {
+              "$ref": "#/components/schemas/ReadoutViewOut"
+            },
+            "type": "array",
+            "title": "Readouts"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotRowOut"
+            },
+            "type": "array",
+            "title": "Slots"
+          },
+          "past": {
+            "items": {
+              "$ref": "#/components/schemas/FactorPastOut"
+            },
+            "type": "array",
+            "title": "Past"
+          },
+          "approvals": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalCardOut"
+            },
+            "type": "array",
+            "title": "Approvals"
+          },
+          "deviations": {
+            "items": {
+              "$ref": "#/components/schemas/DeviationRowOut"
+            },
+            "type": "array",
+            "title": "Deviations"
+          },
+          "elond": {
+            "items": {
+              "$ref": "#/components/schemas/ELondEntryOut"
+            },
+            "type": "array",
+            "title": "Elond"
+          },
+          "protocol_versions": {
+            "items": {
+              "$ref": "#/components/schemas/ProtocolVersionOut"
+            },
+            "type": "array",
+            "title": "Protocol Versions"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "frozen_forecaster": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frozen Forecaster"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "confidence",
+          "as_of",
+          "model_version",
+          "regime_id",
+          "data_sufficiency",
+          "experiment",
+          "tz",
+          "readout",
+          "readouts",
+          "slots",
+          "past",
+          "approvals",
+          "deviations",
+          "elond",
+          "protocol_versions",
+          "seed",
+          "frozen_forecaster"
+        ],
+        "title": "ExperimentDetailOut"
+      },
+      "ExperimentSummaryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "hypothesis": {
+            "type": "string",
+            "title": "Hypothesis"
+          },
+          "design": {
+            "type": "string",
+            "enum": [
+              "per_post",
+              "switchback"
+            ],
+            "title": "Design"
+          },
+          "design_label": {
+            "type": "string",
+            "title": "Design Label"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "pending_approval",
+              "scheduled",
+              "active",
+              "paused",
+              "concluded",
+              "stopped"
+            ],
+            "title": "Status"
+          },
+          "status_label": {
+            "type": "string",
+            "title": "Status Label"
+          },
+          "status_tone": {
+            "type": "string",
+            "enum": [
+              "default",
+              "warn",
+              "positive",
+              "negative",
+              "accent"
+            ],
+            "title": "Status Tone"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/FactorOut"
+            },
+            "type": "array",
+            "title": "Factors"
+          },
+          "primary_metric": {
+            "type": "string",
+            "title": "Primary Metric"
+          },
+          "primary_metric_label": {
+            "type": "string",
+            "title": "Primary Metric Label"
+          },
+          "delta_ratio": {
+            "type": "number",
+            "title": "Delta Ratio"
+          },
+          "horizon_weeks": {
+            "type": "number",
+            "title": "Horizon Weeks"
+          },
+          "weeks_total": {
+            "type": "integer",
+            "title": "Weeks Total"
+          },
+          "week": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Week"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "horizon_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon End"
+          },
+          "concluded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concluded At"
+          },
+          "slots_assigned": {
+            "type": "integer",
+            "title": "Slots Assigned"
+          },
+          "posts_matured": {
+            "type": "integer",
+            "title": "Posts Matured"
+          },
+          "next_look": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextLookOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_look": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Look"
+          },
+          "effect_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Ratio"
+          },
+          "effect_interval80": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Interval80"
+          },
+          "effect_text": {
+            "type": "string",
+            "title": "Effect Text"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "paused_arms": {
+            "items": {
+              "$ref": "#/components/schemas/PausedArmOut"
+            },
+            "type": "array",
+            "title": "Paused Arms"
+          },
+          "pause_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Reason"
+          },
+          "extension_used": {
+            "type": "boolean",
+            "title": "Extension Used",
+            "default": false
+          },
+          "extension_offered": {
+            "type": "boolean",
+            "title": "Extension Offered",
+            "default": false
+          },
+          "pending_approvals": {
+            "type": "integer",
+            "title": "Pending Approvals",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name",
+          "hypothesis",
+          "design",
+          "design_label",
+          "status",
+          "status_label",
+          "status_tone",
+          "factors",
+          "primary_metric",
+          "primary_metric_label",
+          "delta_ratio",
+          "horizon_weeks",
+          "weeks_total",
+          "week",
+          "created_by",
+          "created_at",
+          "started_at",
+          "horizon_end",
+          "concluded_at",
+          "slots_assigned",
+          "posts_matured",
+          "next_look",
+          "latest_look",
+          "effect_ratio",
+          "effect_interval80",
+          "effect_text",
+          "outcome",
+          "paused_arms",
+          "pause_reason",
+          "extension_used",
+          "extension_offered",
+          "pending_approvals"
+        ],
+        "title": "ExperimentSummaryOut"
+      },
+      "ExperimentsOut": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "suggestive",
+              "too early"
+            ],
+            "title": "Confidence"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "regime_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime Id"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "running": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentSummaryOut"
+            },
+            "type": "array",
+            "title": "Running"
+          },
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentSummaryOut"
+            },
+            "type": "array",
+            "title": "Waiting"
+          },
+          "concluded": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentSummaryOut"
+            },
+            "type": "array",
+            "title": "Concluded"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionCardOut"
+            },
+            "type": "array",
+            "title": "Suggestions"
+          },
+          "approvals": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalCardOut"
+            },
+            "type": "array",
+            "title": "Approvals"
+          },
+          "elond": {
+            "$ref": "#/components/schemas/ELondStatusOut"
+          },
+          "posts_per_week": {
+            "type": "number",
+            "title": "Posts Per Week"
+          },
+          "tz": {
+            "type": "string",
+            "title": "Tz"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "confidence",
+          "as_of",
+          "model_version",
+          "regime_id",
+          "data_sufficiency",
+          "running",
+          "waiting",
+          "concluded",
+          "suggestions",
+          "approvals",
+          "elond",
+          "posts_per_week",
+          "tz"
+        ],
+        "title": "ExperimentsOut"
+      },
+      "FactorOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "lever": {
+            "type": "string",
+            "title": "Lever"
+          },
+          "lever_label": {
+            "type": "string",
+            "title": "Lever Label"
+          },
+          "control": {
+            "type": "string",
+            "title": "Control"
+          },
+          "treatment": {
+            "type": "string",
+            "title": "Treatment"
+          },
+          "applies_to": {
+            "type": "string",
+            "title": "Applies To"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "lever",
+          "lever_label",
+          "control",
+          "treatment",
+          "applies_to"
+        ],
+        "title": "FactorOut"
+      },
+      "FactorPastOut": {
+        "properties": {
+          "factor": {
+            "type": "string",
+            "title": "Factor"
+          },
+          "treatment": {
+            "type": "string",
+            "title": "Treatment"
+          },
+          "control": {
+            "type": "string",
+            "title": "Control"
+          },
+          "treated": {
+            "$ref": "#/components/schemas/ArmOutcomeCountsOut"
+          },
+          "controls": {
+            "$ref": "#/components/schemas/ArmOutcomeCountsOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "factor",
+          "treatment",
+          "control",
+          "treated",
+          "controls"
+        ],
+        "title": "FactorPastOut",
+        "description": "How the factor's posts landed against their frozen treatment-blind forecasts (plan \u00a76)."
+      },
+      "FactorReadoutOut": {
+        "properties": {
+          "factor": {
+            "type": "string",
+            "title": "Factor"
+          },
+          "lever": {
+            "type": "string",
+            "title": "Lever"
+          },
+          "control": {
+            "type": "string",
+            "title": "Control"
+          },
+          "treatment": {
+            "type": "string",
+            "title": "Treatment"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "adopt",
+              "reject",
+              "near_threshold",
+              "continue"
+            ],
+            "title": "Decision"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "decided_at_look": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At Look"
+          },
+          "effect_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Ratio"
+          },
+          "interval80": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval80"
+          },
+          "p_gt_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Gt Delta"
+          },
+          "p_lt_zero": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Lt Zero"
+          },
+          "expected_loss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Loss"
+          },
+          "n_treated": {
+            "type": "integer",
+            "title": "N Treated"
+          },
+          "n_control": {
+            "type": "integer",
+            "title": "N Control"
+          },
+          "randomization_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Randomization P"
+          },
+          "disagrees_with_randomization_test": {
+            "type": "boolean",
+            "title": "Disagrees With Randomization Test"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          },
+          "elond": {
+            "type": "string",
+            "title": "Elond"
+          },
+          "e_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "E Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "factor",
+          "lever",
+          "control",
+          "treatment",
+          "decision",
+          "label",
+          "headline",
+          "reason",
+          "decided_at_look",
+          "effect_ratio",
+          "interval80",
+          "p_gt_delta",
+          "p_lt_zero",
+          "expected_loss",
+          "n_treated",
+          "n_control",
+          "randomization_p",
+          "disagrees_with_randomization_test",
+          "confirmed",
+          "elond",
+          "e_value"
+        ],
+        "title": "FactorReadoutOut"
       },
       "FollowerPoint": {
         "properties": {
@@ -1166,6 +3010,29 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HealthCheckOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "ok",
+          "detail"
+        ],
+        "title": "HealthCheckOut"
+      },
       "I48": {
         "properties": {
           "value": {
@@ -1266,6 +3133,67 @@
           "similarity"
         ],
         "title": "NearDuplicate"
+      },
+      "NextLookOut": {
+        "properties": {
+          "look": {
+            "type": "string",
+            "title": "Look"
+          },
+          "after": {
+            "type": "string",
+            "format": "date-time",
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "look",
+          "after"
+        ],
+        "title": "NextLookOut"
+      },
+      "NextPostsOut": {
+        "properties": {
+          "tz": {
+            "type": "string",
+            "title": "Tz"
+          },
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotRowOut"
+            },
+            "type": "array",
+            "title": "Slots"
+          },
+          "drawing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Drawing"
+          },
+          "registered_days": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Registered Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tz",
+          "days",
+          "slots",
+          "drawing",
+          "registered_days"
+        ],
+        "title": "NextPostsOut"
       },
       "NotablePost": {
         "properties": {
@@ -1550,6 +3478,37 @@
           "posts_7d"
         ],
         "title": "OverviewTiles"
+      },
+      "PausedArmOut": {
+        "properties": {
+          "factor": {
+            "type": "string",
+            "title": "Factor"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "factor",
+          "at",
+          "detail"
+        ],
+        "title": "PausedArmOut"
       },
       "PendingAreaInfo": {
         "properties": {
@@ -2127,6 +4086,146 @@
         ],
         "title": "PostsPage"
       },
+      "PowerPreviewOut": {
+        "properties": {
+          "posts_per_day": {
+            "type": "number",
+            "title": "Posts Per Day"
+          },
+          "n_posts": {
+            "type": "integer",
+            "title": "N Posts"
+          },
+          "power_125": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power 125"
+          },
+          "power_15": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power 15"
+          },
+          "power_2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power 2"
+          },
+          "mde_ratio_80": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mde Ratio 80"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "posts_per_day",
+          "n_posts",
+          "power_125",
+          "power_15",
+          "power_2",
+          "mde_ratio_80",
+          "text",
+          "note"
+        ],
+        "title": "PowerPreviewOut",
+        "description": "MODEL \u00a76.8's three numbers at the account's posting rate."
+      },
+      "ProposeIn": {
+        "properties": {
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          },
+          "custom": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomSpecIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProposeIn",
+        "description": "Start one of E01-E09 (``suggestion``) or a custom experiment (``custom``), as the owner."
+      },
+      "ProtocolVersionOut": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "hash": {
+            "type": "string",
+            "title": "Hash"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "hash",
+          "created_by",
+          "created_at",
+          "reason"
+        ],
+        "title": "ProtocolVersionOut"
+      },
       "Quantiles": {
         "properties": {
           "q05": {
@@ -2263,6 +4362,71 @@
         ],
         "title": "RatioKpi"
       },
+      "ReadoutViewOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "look": {
+            "type": "string",
+            "title": "Look"
+          },
+          "experiment_week": {
+            "type": "integer",
+            "title": "Experiment Week"
+          },
+          "final": {
+            "type": "boolean",
+            "title": "Final"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "protocol_version": {
+            "type": "integer",
+            "title": "Protocol Version"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/FactorReadoutOut"
+            },
+            "type": "array",
+            "title": "Factors"
+          },
+          "health": {
+            "items": {
+              "$ref": "#/components/schemas/HealthCheckOut"
+            },
+            "type": "array",
+            "title": "Health"
+          },
+          "health_ok": {
+            "type": "boolean",
+            "title": "Health Ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "look",
+          "experiment_week",
+          "final",
+          "decision",
+          "created_at",
+          "protocol_version",
+          "factors",
+          "health",
+          "health_ok"
+        ],
+        "title": "ReadoutViewOut"
+      },
       "RegisterIn": {
         "properties": {
           "planned_at": {
@@ -2349,6 +4513,68 @@
           "planned_at"
         ],
         "title": "RegisterIn"
+      },
+      "RegisterSlotsIn": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DayPlan"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Days"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "days"
+        ],
+        "title": "RegisterSlotsIn",
+        "description": "Whole local days, each with its slot times (local, the account's zone) and optional labels\nsuch as ``content_kind=demo`` or ``link_post=true`` that factors filter on."
+      },
+      "RegisterSlotsOut": {
+        "properties": {
+          "registered": {
+            "type": "boolean",
+            "title": "Registered"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "experiments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Experiments"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/SlotRowOut"
+            },
+            "type": "array",
+            "title": "Slots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "registered",
+          "summary",
+          "experiments",
+          "warnings",
+          "slots"
+        ],
+        "title": "RegisterSlotsOut"
       },
       "RunFailure": {
         "properties": {
@@ -3026,6 +5252,233 @@
         ],
         "title": "SlotOut"
       },
+      "SlotRowOut": {
+        "properties": {
+          "slot": {
+            "type": "string",
+            "title": "Slot"
+          },
+          "planned_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Planned At"
+          },
+          "planned_local": {
+            "type": "string",
+            "title": "Planned Local"
+          },
+          "post_type": {
+            "type": "string",
+            "title": "Post Type"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Labels"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "posted",
+              "missed",
+              "cancelled"
+            ],
+            "title": "State"
+          },
+          "experiment_slot": {
+            "type": "boolean",
+            "title": "Experiment Slot"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "arms": {
+            "items": {
+              "$ref": "#/components/schemas/ArmOut"
+            },
+            "type": "array",
+            "title": "Arms"
+          },
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast"
+          },
+          "forecast_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Kind"
+          },
+          "forecast_q10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Q10"
+          },
+          "forecast_q50": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Q50"
+          },
+          "forecast_q90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Q90"
+          },
+          "forecast_frozen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Frozen At"
+          },
+          "matched_post": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Post"
+          },
+          "outcome_i48": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome I48"
+          },
+          "pit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pit"
+          },
+          "outcome_status": {
+            "type": "string",
+            "enum": [
+              "above",
+              "as_expected",
+              "below",
+              "awaiting",
+              "planned",
+              "missed",
+              "cancelled"
+            ],
+            "title": "Outcome Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot",
+          "planned_at",
+          "planned_local",
+          "post_type",
+          "labels",
+          "state",
+          "experiment_slot",
+          "text",
+          "arms",
+          "instructions",
+          "forecast",
+          "forecast_kind",
+          "forecast_q10",
+          "forecast_q50",
+          "forecast_q90",
+          "forecast_frozen_at",
+          "matched_post",
+          "outcome_i48",
+          "pit",
+          "outcome_status"
+        ],
+        "title": "SlotRowOut"
+      },
+      "SlotSpec": {
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "time",
+            "title": "Time"
+          },
+          "post_type": {
+            "type": "string",
+            "title": "Post Type",
+            "default": "original"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time"
+        ],
+        "title": "SlotSpec"
+      },
       "SnapshotPoint": {
         "properties": {
           "run_id": {
@@ -3215,6 +5668,110 @@
           "status"
         ],
         "title": "StepStatus"
+      },
+      "StopIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "StopIn"
+      },
+      "SuggestionCardOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "hypothesis": {
+            "type": "string",
+            "title": "Hypothesis"
+          },
+          "mechanism": {
+            "type": "string",
+            "title": "Mechanism"
+          },
+          "design": {
+            "type": "string",
+            "enum": [
+              "per_post",
+              "switchback"
+            ],
+            "title": "Design"
+          },
+          "design_label": {
+            "type": "string",
+            "title": "Design Label"
+          },
+          "factor": {
+            "$ref": "#/components/schemas/FactorOut"
+          },
+          "primary_metric_label": {
+            "type": "string",
+            "title": "Primary Metric Label"
+          },
+          "horizon_weeks": {
+            "type": "number",
+            "title": "Horizon Weeks"
+          },
+          "horizon_text": {
+            "type": "string",
+            "title": "Horizon Text"
+          },
+          "detectability": {
+            "type": "string",
+            "title": "Detectability"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "power": {
+            "$ref": "#/components/schemas/PowerPreviewOut"
+          },
+          "already_running": {
+            "type": "boolean",
+            "title": "Already Running"
+          },
+          "needs_owner_because": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Needs Owner Because"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "hypothesis",
+          "mechanism",
+          "design",
+          "design_label",
+          "factor",
+          "primary_metric_label",
+          "horizon_weeks",
+          "horizon_text",
+          "detectability",
+          "note",
+          "power",
+          "already_running",
+          "needs_owner_because"
+        ],
+        "title": "SuggestionCardOut"
       },
       "UpcomingSlot": {
         "properties": {
