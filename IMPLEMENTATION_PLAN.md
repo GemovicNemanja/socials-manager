@@ -375,6 +375,9 @@ Also checked: the pipeline recovers a non-prior maturity curve within 5% (`test_
 | Maturity curve | Two-parameter Weibull, MAP fit from capture pairs with the BetaBinomial pair likelihood (MODEL §1.3); the prior curve until 30 pairs; each forecast keeps the curve version frozen with it. Curve-parameter uncertainty in the predictive draws is deferred (M1) |
 | Regimes | The latest commit touching `param.rs` in `xai-org/x-algorithm`, via the GitHub API, opens a regime; classifying the change and sync-header dates are deferred (M1) |
 | Labeller sandbox | Headless Claude Code runs from the system temp folder, outside any project, so a repository's `CLAUDE.md`, hooks or settings can't change the labelling call; a missing structured result falls back to the text result, and a failure reports its reason as a briefing caveat (M1) |
+| e-values for e-LOND | The mSPRT likelihood ratio (MODEL §6.7's other allowed e-value) feeds e-LOND. The calibrator e = 1/(2√p) on a 9,999-draw randomization p caps at 50, below e-LOND's threshold after the first test, so nothing could ever be confirmed. The randomization p stays in every readout as MODEL §6.2's cross-check (M2) |
+| Analysis posterior | Seeded Gibbs sampler for MODEL §6.2 (t errors as a scale mixture, day effects, Lin interaction, carryover), ~0.5 s per readout. τ prior sd fixed at s0 = 0.2 (the value §6.3's rule was calibrated with) and s_fam = 0.1, since one experiment has at most 3 factors. Measured over ≥ 1,000 replicates: false adoption 3.1% (target 2.3), 1.25×/1.5×/2× adoption 16.9/48.1/89.3% (17.7/48.4/91.3), A/A size 5.1%, arm harm under a null ≤ 0.1% (M2) |
+| Arm-harm confidence sequence | Design-based (valid by the randomization blocks alone), computed only over blocks whose posts have all matured. It catches a 0.5× arm in 20% of 4-week experiments and 57% of 8-week ones: weak by construction, because the bar is 0.8× and there are about 28 blocks (M2) |
 
 ---
 
