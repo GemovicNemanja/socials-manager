@@ -66,3 +66,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: replicated simulations with >= 1,000 replicates (minutes); run by scripts/check.sh in full mode or `pytest -m slow`",
+]

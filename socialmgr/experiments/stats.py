@@ -19,7 +19,12 @@ Choices and deviations from MODEL §6, in one place:
 - The guardrail confidence sequence is a self-normalized normal-mixture CS (Howard et al. 2021,
   with de la Peña's inequality for conditionally symmetric increments). It needs no variance
   assumption; with randomization blocks it is valid by design alone.
-- e-LOND uses gamma_t = 1/(t(t+1)), the sequence of Xu & Ramdas's own simulations.
+- e-LOND uses gamma_t = 1/(t(t+1)), the sequence of Xu & Ramdas's own simulations. With the
+  p calibrator and a 9,999-draw randomization p (so e <= 50), only the first test of a stream
+  without earlier rejections can reach the 1/alpha_t threshold (20 at t = 1, 60 at t = 2);
+  ``msprt_e_value`` gives an uncapped e-value (MODEL §6.7 allows either).
+- ``power_preview`` computes power against a noncentral t (n - 4 df) instead of the normal: the
+  normal reference misses the §6.8 table's simulated cells by up to 0.05 at n = 28-42.
 """
 
 import math
@@ -599,7 +604,7 @@ def cs_upper_from_stats(
     j = np.minimum(last_ok, d.shape[-1] - 2)
     lo = np.take_along_axis(d, j[..., None], -1)[..., 0]
     hi = np.take_along_axis(d, j[..., None] + 1, -1)[..., 0]
-    for _ in range(50):
+    for _ in range(30):
         mid = (lo + hi) / 2
         out = h(mid, t_a, ss_a) >= 0
         hi = np.where(out, mid, hi)
@@ -677,13 +682,21 @@ class PowerPreview:
 
 def power_preview(n_posts: int, sigma: float = 1.1, r2: float = 0.3, alpha: float = 0.05) -> PowerPreview:
     """The three-number preview: power at 1.25x / 1.5x / 2x and the MDE at 80% power, from
-    SE = 2·sigma·sqrt(1 - R²)/sqrt(n) (MODEL §6.8; matches simulation within ±0.03)."""
+    SE = 2·sigma·sqrt(1 - R²)/sqrt(n) (MODEL §6.8).
+
+    Power uses that SE with a t reference (noncentral t, n - 4 degrees of freedom for the
+    ANCOVA with Lin interaction, n - 2 without a covariate). The normal reference overstates
+    power at small n (0.51 vs the simulated 0.46 at n = 28, R² = 0.3, 2x); the t version is within
+    ±0.02 of every simulated cell of the §6.8 table. The MDE is the §6.8 normal formula, which is
+    how the table's MDE column was computed."""
     se = 2 * sigma * math.sqrt(1 - r2) / math.sqrt(max(n_posts, 1))
     z = sps.norm.ppf(1 - alpha / 2)
+    df = max(n_posts - (4 if r2 > 0 else 2), 1)
+    t_crit = sps.t.ppf(1 - alpha / 2, df)
 
     def pw(lift: float) -> float:
         d = math.log(lift) / se
-        return float(sps.norm.cdf(d - z) + sps.norm.cdf(-d - z))
+        return float(sps.nct.sf(t_crit, df, d) + sps.nct.cdf(-t_crit, df, d))
 
     mde = math.exp((z + sps.norm.ppf(0.8)) * se)
     return PowerPreview(
