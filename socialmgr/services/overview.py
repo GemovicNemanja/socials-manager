@@ -1,8 +1,9 @@
 """Overview screen read model (IMPLEMENTATION_PLAN.md §1, Overview, M1 part).
 
 Every figure here comes from collected data or frozen forecasts. Areas that need data the
-system doesn't produce yet (briefing, follower forecast, drift monitors, goals, planned posts)
-are listed in ``pending_areas`` so the web app and agents can say so instead of guessing.
+system doesn't produce yet (follower forecast, drift monitors, goals) are listed in
+``pending_areas`` so the web app and agents can say so instead of guessing. The briefing and
+planned posts have their own routes (``/api/briefing``, ``/api/planned``).
 """
 
 from datetime import UTC, datetime, timedelta
@@ -100,7 +101,7 @@ class OverviewRun(BaseModel):
     spend_usd: float
 
 
-PendingArea = Literal["briefing", "follower_forecast", "model_health", "goals", "planned_posts"]
+PendingArea = Literal["follower_forecast", "model_health", "goals"]
 
 
 class PendingAreaInfo(BaseModel):
@@ -126,7 +127,6 @@ class Overview(Envelope):
 
 
 PENDING: list[PendingAreaInfo] = [
-    PendingAreaInfo(area="briefing", milestone="M1", reason="Runs don't write a briefing yet (run step 7)."),
     PendingAreaInfo(
         area="follower_forecast",
         milestone="M3",
@@ -138,11 +138,6 @@ PENDING: list[PendingAreaInfo] = [
         reason="Drift monitors (CUSUM) and calibration tests switch on in M3 at 20 matured posts.",
     ),
     PendingAreaInfo(area="goals", milestone="M3", reason="Goal status needs set_goal and the M3 goal model."),
-    PendingAreaInfo(
-        area="planned_posts",
-        milestone="M1",
-        reason="No planned posts yet: register_planned_post isn't available.",
-    ),
 ]
 
 

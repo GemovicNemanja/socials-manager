@@ -92,10 +92,191 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/briefing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Briefing
+         * @description The latest run's briefing: summary lines, notable posts with record ids, caveats, spend.
+         */
+        get: operations["briefing_api_briefing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Status
+         * @description The latest run and any unfinished run, step by step, with a classified failure if any.
+         */
+        get: operations["run_status_api_runs_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Run
+         * @description Run now, or resume an interrupted run, and return the new briefing.
+         *
+         *     Blocks until the run ends (seconds to a minute). It runs in the server's thread pool, so it
+         *     finishes even if the browser goes away; poll ``GET /api/runs/status`` meanwhile. If another
+         *     run holds the lock, returns at once and the status shows that run.
+         */
+        post: operations["start_run_api_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/planned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Schedule
+         * @description Planned posts: upcoming ones with their frozen ranges, and recent ones (posted or missed).
+         */
+        get: operations["schedule_api_planned_get"];
+        put?: never;
+        /**
+         * Register
+         * @description Register a planned post and freeze its forecast now, before the post exists.
+         */
+        post: operations["register_api_planned_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/planned/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft
+         * @description The forecast a planned post would get, with guardrail warnings. Freezes nothing.
+         */
+        post: operations["draft_api_planned_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * BriefingData
+         * @description The structured part of a run briefing (services/briefing.py ``build``).
+         */
+        BriefingData: {
+            /** Run Id */
+            run_id: number;
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Gap Since Prev H */
+            gap_since_prev_h: number | null;
+            /**
+             * New Posts
+             * @default 0
+             */
+            new_posts: number;
+            scored: components["schemas"]["ScoredCounts"];
+            /** Notable */
+            notable: components["schemas"]["NotablePost"][];
+            /**
+             * Late Maturity
+             * @default 0
+             */
+            late_maturity: number;
+            /** Regimes Opened */
+            regimes_opened: string[];
+            /** Near Duplicates */
+            near_duplicates: components["schemas"]["NearDuplicate"][];
+            planned: components["schemas"]["PlannedMatches"];
+            /** Upcoming */
+            upcoming: components["schemas"]["UpcomingSlot"][];
+            /** Curve Version */
+            curve_version: string | null;
+            spend: components["schemas"]["BriefingSpend"] | null;
+            /** Caveats */
+            caveats: string[];
+        };
+        /** BriefingOut */
+        BriefingOut: {
+            /** Summary */
+            summary: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "solid" | "suggestive" | "too early";
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Regime Id */
+            regime_id: number | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats?: string[];
+            /** Run Id */
+            run_id: number | null;
+            /** Lines */
+            lines: string[];
+            briefing: components["schemas"]["BriefingData"] | null;
+        };
+        /** BriefingSpend */
+        BriefingSpend: {
+            /** Run Usd */
+            run_usd: number;
+            /** Month Usd */
+            month_usd: number;
+            /** Cap Usd */
+            cap_usd: number;
+        };
         /**
          * Calibration
          * @description Share of scored posts whose outcome fell inside the frozen 50% and 80% ranges.
@@ -198,6 +379,51 @@ export interface components {
             /** By Age */
             by_age: components["schemas"]["CurvePoint"][];
         };
+        /** ForecastOut */
+        ForecastOut: {
+            /** Id */
+            id: string | null;
+            /** Subject */
+            subject: string;
+            /** Kind */
+            kind: string;
+            /** Frozen */
+            frozen: boolean;
+            /** Quantiles */
+            quantiles: {
+                [key: string]: number;
+            };
+            /** Model Version */
+            model_version: string;
+            /** Curve Version */
+            curve_version: string;
+            /** Manifest Hash */
+            manifest_hash?: string | null;
+            /** Frozen At */
+            frozen_at?: string | null;
+        };
+        /** ForecastResponse */
+        ForecastResponse: {
+            /** Summary */
+            summary: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "solid" | "suggestive" | "too early";
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Regime Id */
+            regime_id: number | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats?: string[];
+            forecast: components["schemas"]["ForecastOut"] | null;
+            /** Guardrails */
+            guardrails?: components["schemas"]["GuardrailHit"][];
+        };
         /** ForecastSummary */
         ForecastSummary: {
             /** Q10 */
@@ -211,6 +437,17 @@ export interface components {
              * @enum {string}
              */
             kind: "live" | "as_of" | "treatment_blind" | "prior_only_uncalibrated";
+        };
+        /** GuardrailHit */
+        GuardrailHit: {
+            /** Rule */
+            rule: string;
+            /** Severity */
+            severity: string;
+            /** Detail */
+            detail: string;
+            /** Ref */
+            ref?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -235,6 +472,31 @@ export interface components {
             /** N Posts */
             n_posts: number;
             expected: components["schemas"]["ExpectedRange"] | null;
+        };
+        /** NearDuplicate */
+        NearDuplicate: {
+            /** Post */
+            post: string;
+            /** Matches */
+            matches: string;
+            /** Similarity */
+            similarity: number;
+        };
+        /** NotablePost */
+        NotablePost: {
+            /** Post */
+            post: string;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "above" | "as_expected" | "below";
+            /** Outcome I48 */
+            outcome_i48: number;
+            /** Expected Median */
+            expected_median: number;
+            /** Text */
+            text: string;
         };
         /** Overview */
         Overview: {
@@ -308,11 +570,78 @@ export interface components {
              * Area
              * @enum {string}
              */
-            area: "briefing" | "follower_forecast" | "model_health" | "goals" | "planned_posts";
+            area: "follower_forecast" | "model_health" | "goals";
             /** Milestone */
             milestone: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * PlanIn
+         * @description A post the member intends to publish. ``planned_at`` needs an offset; it is stored in UTC.
+         */
+        PlanIn: {
+            /**
+             * Planned At
+             * Format: date-time
+             */
+            planned_at: string;
+            /** Text */
+            text?: string | null;
+            /**
+             * Post Type
+             * @default original
+             * @enum {string}
+             */
+            post_type: "original" | "quote" | "reply" | "repost" | "self_reply";
+            /** Post Format */
+            post_format?: ("Text" | "Image" | "Video" | "Text + link" | "Thread" | "Poll") | null;
+            /** Topic */
+            topic?: ("ai" | "software_development" | "science_technology" | "career" | "personal" | "other") | null;
+            /**
+             * Has Link
+             * @default false
+             */
+            has_link: boolean;
+        };
+        /** PlannedMatches */
+        PlannedMatches: {
+            /**
+             * Matched
+             * @default 0
+             */
+            matched: number;
+            /**
+             * Missed
+             * @default 0
+             */
+            missed: number;
+        };
+        /** PlannedResponse */
+        PlannedResponse: {
+            /** Summary */
+            summary: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "solid" | "suggestive" | "too early";
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Regime Id */
+            regime_id: number | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats?: string[];
+            /** Slot */
+            slot: string | null;
+            forecast: components["schemas"]["ForecastOut"] | null;
+            /** Guardrails */
+            guardrails?: components["schemas"]["GuardrailHit"][];
+            /** Registered */
+            registered: boolean;
         };
         /** PostDetail */
         PostDetail: {
@@ -427,6 +756,137 @@ export interface components {
             /** Denominator */
             denominator: number | null;
         };
+        /** RegisterIn */
+        RegisterIn: {
+            /**
+             * Planned At
+             * Format: date-time
+             */
+            planned_at: string;
+            /** Text */
+            text?: string | null;
+            /**
+             * Post Type
+             * @default original
+             * @enum {string}
+             */
+            post_type: "original" | "quote" | "reply" | "repost" | "self_reply";
+            /** Post Format */
+            post_format?: ("Text" | "Image" | "Video" | "Text + link" | "Thread" | "Poll") | null;
+            /** Topic */
+            topic?: ("ai" | "software_development" | "science_technology" | "career" | "personal" | "other") | null;
+            /**
+             * Has Link
+             * @default false
+             */
+            has_link: boolean;
+            /**
+             * Accept Warnings
+             * @default false
+             */
+            accept_warnings: boolean;
+        };
+        /** RunFailure */
+        RunFailure: {
+            /** Run Id */
+            run_id: number;
+            /** Step */
+            step: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "reauth" | "x_unavailable" | "interrupted" | "other";
+            /** Title */
+            title: string;
+            /** Detail */
+            detail: string;
+            /** Command */
+            command: string | null;
+        };
+        /** RunStartOut */
+        RunStartOut: {
+            briefing: components["schemas"]["BriefingOut"];
+            status: components["schemas"]["RunStatusOut"];
+        };
+        /** RunStatus */
+        RunStatus: {
+            /** Run Id */
+            run_id: number;
+            /** Status */
+            status: string;
+            /** Trigger */
+            trigger: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Spend Usd */
+            spend_usd: number;
+            /** Steps */
+            steps: components["schemas"]["StepStatus"][];
+        };
+        /** RunStatusOut */
+        RunStatusOut: {
+            /** Summary */
+            summary: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "solid" | "suggestive" | "too early";
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Regime Id */
+            regime_id: number | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats?: string[];
+            latest: components["schemas"]["RunStatus"] | null;
+            unfinished: components["schemas"]["RunStatus"] | null;
+            /** Active */
+            active: boolean;
+            /** Step Summaries */
+            step_summaries: {
+                [key: string]: string;
+            };
+            /** Step Details */
+            step_details: {
+                [key: string]: string;
+            };
+            failure: components["schemas"]["RunFailure"] | null;
+        };
+        /** ScheduleResponse */
+        ScheduleResponse: {
+            /** Summary */
+            summary: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "solid" | "suggestive" | "too early";
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Regime Id */
+            regime_id: number | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats?: string[];
+            /** Slots */
+            slots: components["schemas"]["SlotOut"][];
+        };
         /** ScoreDetail */
         ScoreDetail: {
             /** Outcome */
@@ -455,6 +915,24 @@ export interface components {
              * Format: date-time
              */
             scored_at: string;
+        };
+        /** ScoredCounts */
+        ScoredCounts: {
+            /**
+             * Above
+             * @default 0
+             */
+            above: number;
+            /**
+             * As Expected
+             * @default 0
+             */
+            as_expected: number;
+            /**
+             * Below
+             * @default 0
+             */
+            below: number;
         };
         /** Shell */
         Shell: {
@@ -507,6 +985,30 @@ export interface components {
             spent_usd: number;
             /** Cap Usd */
             cap_usd: number;
+        };
+        /** SlotOut */
+        SlotOut: {
+            /** Slot */
+            slot: string;
+            /**
+             * Planned At
+             * Format: date-time
+             */
+            planned_at: string;
+            /** State */
+            state: string;
+            /** Post Type */
+            post_type: string;
+            /** Text */
+            text: string | null;
+            /** Matched Post */
+            matched_post: string | null;
+            /** Forecast Q10 */
+            forecast_q10: number | null;
+            /** Forecast Q50 */
+            forecast_q50: number | null;
+            /** Forecast Q90 */
+            forecast_q90: number | null;
         };
         /** SnapshotPoint */
         SnapshotPoint: {
@@ -567,6 +1069,25 @@ export interface components {
              * @default 0
              */
             no_forecast: number;
+        };
+        /** StepStatus */
+        StepStatus: {
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Error */
+            error?: string | null;
+        };
+        /** UpcomingSlot */
+        UpcomingSlot: {
+            /** Slot */
+            slot: string;
+            /**
+             * Planned At
+             * Format: date-time
+             */
+            planned_at: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -719,6 +1240,170 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Overview"];
+                };
+            };
+        };
+    };
+    briefing_api_briefing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingOut"];
+                };
+            };
+        };
+    };
+    run_status_api_runs_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunStatusOut"];
+                };
+            };
+        };
+    };
+    start_run_api_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunStartOut"];
+                };
+            };
+        };
+    };
+    schedule_api_planned_get: {
+        parameters: {
+            query?: {
+                include_past_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_api_planned_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlannedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_api_planned_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForecastResponse"];
+                };
+            };
+            /** @description No owner account yet: run once first */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
