@@ -30,6 +30,16 @@ TOOLS = {
     "set_label",
     "get_account_overview",
     "export_data",
+    "get_experiments",
+    "get_experiment",
+    "power_check",
+    "propose_experiment",
+    "register_slots",
+    "schedule_experiment",
+    "amend_experiment",
+    "stop_experiment",
+    "get_readout",
+    "list_approvals",
 }
 ENVELOPE = {"summary", "confidence", "as_of", "model_version", "regime_id", "data_sufficiency", "caveats"}
 
@@ -182,3 +192,37 @@ def test_confidence_thresholds() -> None:
     assert confidence_for(30) == "suggestive"
     assert confidence_for(80) == "solid"
     assert confidence_for(80, calibrated=False) == "too early"
+
+
+def test_experiment_tools_end_to_end_and_no_agent_approval(server: Any) -> None:
+    listed = call(server, "get_experiments")
+    keys = {sg["key"] for sg in listed["suggestions"]}
+    assert {"E01", "E03", "E09"} <= keys and "E10" not in keys
+    power = call(server, "power_check", suggestion_key="E03")
+    assert set(power["power"]["power"]) == {"1.25x", "1.5x", "2x"}
+
+    proposed = call(server, "propose_experiment", suggestion_key="E03")
+    assert proposed["experiment"]["status"] == "scheduled", proposed["summary"]
+
+    tomorrow = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+    slots = call(
+        server,
+        "register_slots",
+        days=[{"day": tomorrow, "slots": [{"time": "07:00"}, {"time": "11:00"}, {"time": "16:00"}]}],
+    )
+    assert len(slots["slots"]) == 3, slots["summary"]
+    detail = call(server, "get_experiment", experiment="E03")
+    assert detail["experiment"]["key"] == "E03"
+    readout = call(server, "get_readout", experiment="E03")
+    assert readout["readout"] is None and "first look" in readout["summary"]
+
+    # Amending a frozen field creates an approval; there is no tool an agent could approve it with.
+    amended = call(server, "amend_experiment", experiment="E03", changes={"delta": 0.2}, reason="test")
+    assert len(amended["approvals"]) == 1, amended["summary"]
+    pending = call(server, "list_approvals")
+    assert [a["id"] for a in pending["approvals"]] == [amended["approvals"][0]["id"]]
+    tools = {t.name for t in asyncio.run(server.list_tools())}
+    assert not any("approv" in name and name != "list_approvals" for name in tools)
+
+    stopped = call(server, "stop_experiment", experiment="E03", reason="done testing")
+    assert stopped["experiment"]["status"] == "stopped"
