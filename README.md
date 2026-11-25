@@ -143,6 +143,12 @@ Settings come from `SOCIALMGR_`-prefixed environment variables or `.env` (`socia
 
 To label through the Anthropic API instead of Claude Code: `uv sync --extra api`, then `SOCIALMGR_PLUGINS__LABELER=anthropic_api` and `SOCIALMGR_ANTHROPIC_API_KEY`.
 
+## Troubleshooting
+
+- **`ModuleNotFoundError: No module named 'socialmgr'` from `uv run socialmgr`.** macOS sometimes marks the virtualenv's `.pth` files hidden, and Python 3.13 skips hidden `.pth` files. Fix: `chflags nohidden .venv/lib/python3.13/site-packages/*.pth`. Or run the CLI as `uv run python -m socialmgr <command>` from the repository folder, which doesn't depend on them.
+- **"Run `socialmgr connect`" in a briefing.** X refused the stored sign-in (revoked, or unused for too long). Run `socialmgr connect` again; nothing else is lost.
+- **One install per account.** X refresh tokens are single-use: don't run two copies of the same data folder (for example a second checkout with a copied `data/`), or one will sign the other out.
+
 ## Development
 
 ```sh
