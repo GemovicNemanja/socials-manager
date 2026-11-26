@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { useBriefing, useOverview, useRunStatus, useSchedule, useStartRun } from "../api/hooks";
+import { useBriefing, useFollowers, useGoals, useModelHealth, useOverview, useRunStatus, useSchedule, useStartRun } from "../api/hooks";
 import type {
   BriefingResponse,
   Confidence,
-  FollowerPoint,
+  FollowersResponse,
   Kpi,
   OverviewResponse,
   PlannedSlot,
@@ -16,9 +16,9 @@ import { Button } from "../components/Button";
 import { CollectionErrorBanner } from "../components/CollectionErrorBanner";
 import { ColumnHeader } from "../components/ColumnHeader";
 import { CountRow } from "../components/CountRow";
-import { ExpectationTile, type ExpectationTileProps, type ExpectationTileReading } from "../components/ExpectationTile";
+import { ExpectationTile, type ExpectationTileProps } from "../components/ExpectationTile";
+import { FollowerChart } from "../components/FollowerChart";
 import { icons } from "../components/icons";
-import { LegendItem } from "../components/LegendItem";
 import { Meter } from "../components/Meter";
 import { PanelHeader } from "../components/PanelHeader";
 import { PostTableRow } from "../components/PostTableRow";
@@ -29,77 +29,59 @@ import {
   formatChange,
   formatCompact,
   formatDateTime,
-  formatDay,
   formatInt,
   formatLabel,
   formatPercent,
-  formatPercentile,
   formatSigned,
   formatUsd,
 } from "../lib/format";
+import { expectedFields } from "../lib/expectation";
+import { describeGoal, GOAL_STATUS, goalReasonText, primaryGoal } from "../lib/goals";
 import { href, navigate } from "../lib/router";
 import { useNow } from "../lib/useNow";
 import { RegisterPlannedPostDialog } from "./RegisterPlannedPostDialog";
+import { SetGoalDialog } from "./SetGoalDialog";
 
 const START_RUN_TITLE = "Collect from X now, label, freeze forecasts and score matured posts (about a minute)";
 const CheckIcon = icons.ActionCheck;
-
-/** MODEL §4.1 thresholds, applied to a KPI's percentile under its predictive distribution. */
-function readingOf(percentile: number): ExpectationTileReading {
-  if (percentile >= 0.8) return "above";
-  if (percentile <= 0.2) return "below";
-  return "default";
-}
-
-/** The verbal outcome of a KPI against its expected range, coloured like the post status pills. */
-const OUTCOME: Record<"above" | "default" | "below", NonNullable<ExpectationTileProps["outcome"]>> = {
-  above: { label: "Above expected", status: "working" },
-  default: { label: "As expected", status: "insufficient" },
-  below: { label: "Below expected", status: "not-working" },
-};
-
-/** Percentile 0.1..0.9 maps onto the band (0.2..0.8 of the strip). */
-function stripPosition(percentile: number): number {
-  return 0.2 + (percentile - 0.1) * 0.75;
-}
 
 function rangeTile(label: string, kpi: Kpi, value: string, delta: string, empty: string): ExpectationTileProps {
   const e = kpi.expected;
   if (kpi.value == null || !e) {
     return { label, value: kpi.value == null ? EMPTY : value, delta, percentile: EMPTY, range: empty, reading: "none" };
   }
-  const reading = readingOf(e.percentile);
+  return { label, value, delta, ...expectedFields(e.percentile, `expected ${formatCompact(e.q10)}–${formatCompact(e.q90)} (80%)`) };
+}
+
+function followersTile(ov: OverviewResponse, followers: FollowersResponse | undefined): ExpectationTileProps {
+  const f = ov.tiles.followers;
+  const delta = f.change_7d != null ? `${formatSigned(f.change_7d)} in 7d` : f.now != null ? "at first run" : "no run yet";
+  const e = followers?.tiles.followers.expected;
+  if (f.now != null && e) {
+    const range = `expected ${formatInt(e.expected.q10)}–${formatInt(e.expected.q90)} (80%)`;
+    return { label: "Followers", value: formatInt(f.now), delta, ...expectedFields(e.percentile, range) };
+  }
   return {
-    label,
-    value,
+    label: "Followers",
+    value: formatInt(f.now),
     delta,
-    percentile: formatPercentile(e.percentile),
-    range: `expected ${formatCompact(e.q10)}–${formatCompact(e.q90)} (80%)`,
-    reading,
-    position: stripPosition(e.percentile),
-    outcome: OUTCOME[reading === "above" || reading === "below" ? reading : "default"],
+    percentile: EMPTY,
+    range:
+      f.change_28d != null
+        ? `no forecast yet · ${formatSigned(f.change_28d)} in 28d`
+        : f.now != null
+          ? "no follower forecast yet"
+          : "first run sets the baseline",
+    reading: "none",
   };
 }
 
-function buildTiles(ov: OverviewResponse): ExpectationTileProps[] {
+function buildTiles(ov: OverviewResponse, followers: FollowersResponse | undefined): ExpectationTileProps[] {
   const t = ov.tiles;
   const noPosts = ov.total_posts === 0;
-  const f = t.followers;
   const counts = ov.status_7d;
   return [
-    {
-      label: "Followers",
-      value: formatInt(f.now),
-      delta: f.change_7d != null ? `${formatSigned(f.change_7d)} in 7d` : f.now != null ? "at first run" : "no run yet",
-      percentile: EMPTY,
-      range:
-        f.change_28d != null
-          ? `no forecast yet · M3 · ${formatSigned(f.change_28d)} in 28d`
-          : f.now != null
-            ? "no forecast yet · M3"
-            : "first run sets the baseline",
-      reading: "none",
-    },
+    followersTile(ov, followers),
     rangeTile(
       "Impressions, 7d",
       t.impressions_7d,
@@ -120,7 +102,7 @@ function buildTiles(ov: OverviewResponse): ExpectationTileProps[] {
       delta:
         t.profile_visit_share_7d.value != null ? `${formatPercent(t.profile_visit_share_7d.value)} of impr.` : "no posts yet",
       percentile: EMPTY,
-      range: noPosts ? "needs matured posts" : "no forecast yet · M3",
+      range: noPosts ? "needs matured posts" : "no forecast yet",
       reading: "none",
     },
     {
@@ -129,7 +111,7 @@ function buildTiles(ov: OverviewResponse): ExpectationTileProps[] {
       delta:
         t.visit_to_follow_7d.value != null ? `visit→follow ${formatPercent(t.visit_to_follow_7d.value)}` : "no posts yet",
       percentile: EMPTY,
-      range: noPosts ? "needs matured posts" : "no forecast yet · M3",
+      range: noPosts ? "needs matured posts" : "no forecast yet",
       reading: "none",
     },
     {
@@ -180,6 +162,8 @@ export function OverviewPage() {
   const tz = ov?.account?.tz ?? "UTC";
   const run = useRunControl();
   const [registering, setRegistering] = useState(false);
+  const [settingGoal, setSettingGoal] = useState(false);
+  const goals = useGoals();
   const [dismissed, setDismissed] = useState<number | null>(null);
   const failure = !run.running ? run.status?.failure : null;
 
@@ -234,10 +218,18 @@ export function OverviewPage() {
           running?
         </Message>
       ) : (
-        <OverviewBody ov={overview.data} tz={tz} run={run} onRegister={() => setRegistering(true)} />
+        <OverviewBody
+          ov={overview.data}
+          tz={tz}
+          run={run}
+          onRegister={() => setRegistering(true)}
+          onSetGoal={() => setSettingGoal(true)}
+          hasGoal={(goals.data?.current.length ?? 0) > 0}
+        />
       )}
 
       {registering && <RegisterPlannedPostDialog tz={tz} onClose={() => setRegistering(false)} />}
+      {settingGoal && <SetGoalDialog tz={tz} current={goals.data?.current ?? []} onClose={() => setSettingGoal(false)} />}
     </div>
   );
 }
@@ -247,14 +239,17 @@ interface BodyProps {
   tz: string;
   run: RunControl;
   onRegister: () => void;
+  onSetGoal: () => void;
+  hasGoal: boolean;
 }
 
 function OverviewBody(props: BodyProps) {
   const { ov } = props;
+  const followers = useFollowers();
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <section aria-label="Expectations" className="flex w-full shrink-0 border-b border-rule">
-        {buildTiles(ov).map((tile) => (
+        {buildTiles(ov, followers.data).map((tile) => (
           <ExpectationTile key={tile.label} {...tile} className="min-w-0 flex-1" />
         ))}
       </section>
@@ -277,13 +272,21 @@ function RunProgress({ run, tz }: { run: RunControl; tz: string }) {
 }
 
 function Dashboard({ ov, tz, run, onRegister }: BodyProps) {
+  const followers = useFollowers();
+  const f = followers.data;
   return (
     <>
-      <div className="flex h-[330px] w-full shrink-0 border-b border-rule font-sans">
-        <FollowerPanel series={ov.follower_series} tz={tz} />
+      <div className="flex min-h-[330px] w-full shrink-0 border-b border-rule font-sans">
+        <FollowerChart
+          actual={f?.actual ?? ov.follower_series.map((p) => ({ at: p.at, value: p.followers }))}
+          forecast={f?.forecast ?? null}
+          annotations={f?.annotations}
+          tz={tz}
+          className="flex-1 border-r border-rule"
+        />
         <div className="flex w-[400px] shrink-0 flex-col">
           <StatusSection ov={ov} />
-          <HealthSection ov={ov} />
+          <HealthSection ov={ov} tz={tz} />
         </div>
       </div>
       <div className="flex w-full flex-1 font-sans">
@@ -322,118 +325,6 @@ function Dashboard({ ov, tz, run, onRegister }: BodyProps) {
         {run.running ? <RunProgress run={run} tz={tz} /> : <BriefingPanel ov={ov} tz={tz} onRegister={onRegister} />}
       </div>
     </>
-  );
-}
-
-/* ------------------------------------------------------------------ follower chart */
-
-function niceMax(value: number): number {
-  if (value <= 0) return 10;
-  const step = 10 ** Math.floor(Math.log10(value));
-  for (const m of [1, 2, 2.5, 5, 10]) if (m * step >= value) return m * step;
-  return 10 * step;
-}
-
-/** Share of the plot width given to history; the rest is where the M3 forecast band goes. */
-const TODAY_AT = 0.6;
-
-function FollowerPanel({ series, tz }: { series: FollowerPoint[]; tz: string }) {
-  const first = series[0];
-  const last = series[series.length - 1];
-  const t0 = first ? Date.parse(first.at) : 0;
-  const t1 = last ? Date.parse(last.at) : 0;
-  const span = Math.max(1, t1 - t0);
-  const tEnd = t1 + (span * (1 - TODAY_AT)) / TODAY_AT;
-  const yMax = niceMax(Math.max(...series.map((p) => p.followers), 0) * 1.05);
-  const x = (t: number) => ((t - t0) / (tEnd - t0)) * 800;
-  const y = (v: number) => 220 - (v / yMax) * 220;
-  const points = series.map((p) => `${x(Date.parse(p.at)).toFixed(1)},${y(p.followers).toFixed(1)}`).join(" ");
-  const xTicks = Array.from({ length: 6 }, (_, i) => t0 + ((tEnd - t0) * i) / 5);
-
-  return (
-    <section aria-label="Followers" className="flex min-w-0 flex-1 flex-col border-r border-rule px-4 py-3">
-      <div className="flex items-center gap-3">
-        <PanelHeader
-          title="Followers"
-          subtitle={last ? `per run · last ${formatDateTime(last.at, tz)}` : "no snapshots yet"}
-          showAction={false}
-          inset={false}
-          className="h-6 min-w-0 flex-1"
-        />
-        <div className="flex items-center gap-4">
-          <LegendItem label="Actual, per run" swatch="neutral" />
-          <LegendItem label="Median · M3" swatch="faint" />
-          <LegendItem label="80% range · M3" swatch="band" />
-        </div>
-      </div>
-      <div className="flex flex-1 gap-2 pt-3">
-        <div className="flex w-8 flex-col items-end justify-between pb-5">
-          {[1, 0.75, 0.5, 0.25, 0].map((f) => (
-            <span key={f} className="font-mono text-[10px] leading-none text-faint">
-              {formatInt(yMax * f)}
-            </span>
-          ))}
-        </div>
-        <div className="flex flex-1 flex-col">
-          <div className="relative flex-1 border border-rule bg-plot">
-            <div className="absolute inset-0 flex flex-col justify-between">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-px w-full bg-grid" />
-              ))}
-            </div>
-            {series.length > 0 && (
-              <svg
-                viewBox="0 0 800 220"
-                preserveAspectRatio="none"
-                className="absolute inset-0 size-full"
-                role="img"
-                aria-label={`Followers per run, ${formatInt(first?.followers)} to ${formatInt(last?.followers)}`}
-              >
-                <polyline
-                  points={points}
-                  fill="none"
-                  className="stroke-neutral"
-                  strokeWidth={2}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <line
-                  x1={x(t1)}
-                  y1={0}
-                  x2={x(t1)}
-                  y2={220}
-                  className="stroke-faint"
-                  strokeWidth={1}
-                  vectorEffect="non-scaling-stroke"
-                />
-              </svg>
-            )}
-            {last && (
-              <span
-                className="absolute top-1.5 ml-1 font-mono text-[10px] leading-normal text-text"
-                style={{ left: `${TODAY_AT * 100}%` }}
-              >
-                Today {formatInt(last.followers)}
-              </span>
-            )}
-            <div
-              className="absolute inset-y-0 right-0 flex items-center justify-center px-6"
-              style={{ left: `${TODAY_AT * 100}%` }}
-            >
-              <p className="max-w-56 text-center text-xs leading-normal text-faint">
-                Follower forecast band arrives in <span className="font-mono text-muted">M3</span>.
-              </p>
-            </div>
-          </div>
-          <div className="flex h-5 items-end justify-between">
-            {xTicks.map((t) => (
-              <span key={t} className="font-mono text-[10px] leading-normal text-faint">
-                {series.length ? formatDay(new Date(t).toISOString(), tz) : ""}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -484,11 +375,24 @@ function StatusSection({ ov }: { ov: OverviewResponse }) {
   );
 }
 
-function HealthSection({ ov }: { ov: OverviewResponse }) {
+function HealthSection({ ov, tz }: { ov: OverviewResponse; tz: string }) {
   const cal = ov.calibration;
-  const priorOnly = ov.data_sufficiency.reason === "prior_only_uncalibrated";
+  const model = useModelHealth();
+  const goals = useGoals();
+  const m = model.data;
+  const goal = primaryGoal(goals.data);
+  const drift = m?.drift;
+  const badge: { label: string; tone: BadgeTone } =
+    !m || m.stage === "prior_only"
+      ? { label: "Prior only", tone: "warn" }
+      : m.calibration.passed == null
+        ? { label: "Not tested yet", tone: "default" }
+        : m.calibration.passed
+          ? { label: "Calibrated", tone: "positive" }
+          : { label: "Miscalibrated", tone: "negative" };
+  const status = goal ? GOAL_STATUS[goal.status] : null;
   return (
-    <section aria-label="Calibration" className="flex flex-1 flex-col gap-[7px] px-4 pt-2.5 pb-2">
+    <section aria-label="Calibration" className="flex min-h-0 flex-1 flex-col gap-1 px-4 pt-1.5 pb-1.5">
       <div className="flex items-center gap-2">
         <PanelHeader
           title="Are the expectations right?"
@@ -497,8 +401,19 @@ function HealthSection({ ov }: { ov: OverviewResponse }) {
           inset={false}
           className="h-6 min-w-0 flex-1"
         />
-        <Badge label={priorOnly ? "Prior only" : "Monitors in M3"} tone={priorOnly ? "warn" : "default"} />
+        <Badge label={badge.label} tone={badge.tone} />
       </div>
+      <Meter
+        label="Location drift (CUSUM)"
+        value={
+          drift?.armed && drift.stat != null && drift.threshold != null
+            ? `${drift.stat.toFixed(1)} / ${drift.threshold.toFixed(2)}${drift.state === "alarm" ? " · alarm" : ""}`
+            : "not armed yet"
+        }
+        fraction={drift?.stat != null && drift.threshold ? drift.stat / drift.threshold : 0}
+        fill={drift?.state === "alarm" ? "negative" : "neutral"}
+        className="w-full"
+      />
       <Meter
         label="80% range hit rate"
         value={`${formatPercent(cal.in_80_rate, 0)}  n=${formatInt(cal.n)}`}
@@ -506,16 +421,37 @@ function HealthSection({ ov }: { ov: OverviewResponse }) {
         className="w-full"
       />
       <Meter
-        label="50% range hit rate"
-        value={`${formatPercent(cal.in_50_rate, 0)}  n=${formatInt(cal.n)}`}
-        fraction={cal.in_50_rate ?? 0}
+        label={goal ? `Goal: ${describeGoal(goal.goal, tz)}` : "Goal"}
+        value={
+          !goal
+            ? "no goal set"
+            : goal.p_goal != null
+              ? `${status!.label} · ${formatPercent(goal.p_goal, 0)}`
+              : status!.label
+        }
+        fraction={goal?.p_goal ?? 0}
+        fill={status?.fill ?? "neutral"}
         className="w-full"
       />
-      <span className="text-[11px] leading-[1.45455] text-faint">
-        Near 80% and 50% means the ranges are about right. Drift monitors (CUSUM) and goal status arrive in{" "}
-        <span className="font-mono text-muted">M3</span>.
-      </span>
+      <HealthNote
+        lead={
+          m && m.calibration.berkowitz_p != null
+            ? `Calibration p ${m.calibration.berkowitz_p < 0.01 ? "< 0.01" : `= ${m.calibration.berkowitz_p.toFixed(2)}`} over the last ${formatInt(m.calibration.n)} posts.`
+            : "Near 80% means the ranges are about right."
+        }
+        goalNote={goal ? goalReasonText(goal) : null}
+      />
     </section>
+  );
+}
+
+/** One line under the health meters (the row has a fixed height); the full note is its tooltip. */
+function HealthNote({ lead, goalNote }: { lead: string; goalNote: string | null }) {
+  const full = [lead, goalNote, "A drift alarm means reset the model or the goal, not the content."].filter(Boolean).join(" ");
+  return (
+    <span title={full} className="truncate text-[11px] leading-[1.45455] text-faint">
+      {full}
+    </span>
   );
 }
 
@@ -709,7 +645,7 @@ interface Step {
   action?: { label: string; primary?: boolean; title: string; onClick?: () => void; disabled?: boolean };
 }
 
-function DayZero({ ov, tz, run, onRegister }: BodyProps) {
+function DayZero({ ov, tz, run, onRegister, onSetGoal, hasGoal }: BodyProps) {
   const schedule = useSchedule();
   const planned = (schedule.data?.slots ?? []).length > 0;
   const steps: Step[] = [
@@ -733,8 +669,8 @@ function DayZero({ ov, tz, run, onRegister }: BodyProps) {
     {
       title: "Set a goal",
       body: "There is no default goal without peers. Goal status reads “no goal set” until you add one.",
-      done: false,
-      action: { label: "Set goal", title: "Goals arrive in M3", disabled: true },
+      done: hasGoal,
+      action: { label: "Set goal", title: "Set a follower or per-post goal", onClick: onSetGoal },
     },
     {
       title: "Register your first planned posts",

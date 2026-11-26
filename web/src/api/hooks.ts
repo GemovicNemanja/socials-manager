@@ -1,6 +1,13 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, unwrap } from "./client";
-import type { PlanRequest, PostsStatusFilter, ProposeRequest, RegisterRequest, RegisterSlotsRequest } from "./models";
+import type {
+  GoalRequest,
+  PlanRequest,
+  PostsStatusFilter,
+  ProposeRequest,
+  RegisterRequest,
+  RegisterSlotsRequest,
+} from "./models";
 
 export const PAGE_SIZE = 50;
 /** How often run status is polled while a run executes. */
@@ -18,7 +25,74 @@ export const queryKeys = {
   experiments: ["experiments"] as const,
   experiment: (key: string) => ["experiments", key] as const,
   nextPosts: ["next-posts"] as const,
+  model: ["model"] as const,
+  followers: ["followers"] as const,
+  goals: ["goals"] as const,
+  goalPreview: (req: GoalRequest | null) => ["goals", "preview", req] as const,
 };
+
+/** The Forecasts screen: hit rates, skill, calibration, drift, PIT, model card, gates, changes, monitors, alarms. */
+export function useModelHealth() {
+  return useQuery({
+    queryKey: queryKeys.model,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/model", { signal })),
+    refetchInterval: 60_000,
+  });
+}
+
+/** Acknowledge a detector alarm; nothing else changes. */
+export function useAcknowledgeAlarm() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: number; note?: string }) =>
+      unwrap(api.POST("/api/alarms/{alarm_id}/ack", { params: { path: { alarm_id: id } }, body: note ? { note } : undefined })),
+    onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.model }),
+  });
+}
+
+/** Follower tiles, actuals per run, the latest frozen follower forecast, funnel, goal and scored past forecasts. */
+export function useFollowers() {
+  return useQuery({
+    queryKey: queryKeys.followers,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/followers", { signal })),
+    refetchInterval: 60_000,
+  });
+}
+
+/** Current goals with their status, and every goal ever set. */
+export function useGoals() {
+  return useQuery({
+    queryKey: queryKeys.goals,
+    queryFn: ({ signal }) => unwrap(api.GET("/api/goals", { signal })),
+    refetchInterval: 60_000,
+  });
+}
+
+/** Where you'd stand today against an unsaved goal; idle while req is null. */
+export function useGoalPreview(req: GoalRequest | null) {
+  return useQuery({
+    queryKey: queryKeys.goalPreview(req),
+    queryFn: ({ signal }) => unwrap(api.POST("/api/goals/preview", { body: req!, signal })),
+    enabled: req != null,
+    placeholderData: keepPreviousData,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+/** Save a goal: supersedes the scope's current goal. A refusal comes back as saved=false with a summary. */
+export function useSetGoal() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GoalRequest) => unwrap(api.POST("/api/goals", { body })),
+    onSuccess: (data) => {
+      if (!data.saved) return;
+      for (const key of [queryKeys.goals, queryKeys.followers, queryKeys.model, queryKeys.overview]) {
+        void client.invalidateQueries({ queryKey: key });
+      }
+    },
+  });
+}
 
 /** Running, waiting and concluded experiments, E01-E09 with power, pending approvals. */
 export function useExperiments() {

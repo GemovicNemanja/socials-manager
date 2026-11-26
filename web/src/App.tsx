@@ -3,7 +3,7 @@ import { useRoute } from "./lib/router";
 import { AccountPage } from "./pages/AccountPage";
 import { ExperimentsPage } from "./pages/ExperimentsPage";
 import { OverviewPage } from "./pages/OverviewPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { ForecastsPage } from "./pages/ForecastsPage";
 import { PostsPage } from "./pages/PostsPage";
 
 export function App() {
@@ -21,7 +21,7 @@ export function App() {
         ) : route === "account" ? (
           <AccountPage />
         ) : (
-          <PlaceholderPage title="Forecasts" milestone="M3" />
+          <ForecastsPage />
         )}
       </main>
     </div>
