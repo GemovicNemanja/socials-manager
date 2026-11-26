@@ -1119,6 +1119,50 @@
           }
         }
       }
+    },
+    "/api/journal": {
+      "get": {
+        "tags": [
+          "journal"
+        ],
+        "summary": "Journal",
+        "description": "The public journal's data. ``preview`` (the default here) includes draft entries, marked;\nthe published site is built with ``preview=false`` and never contains drafts.",
+        "operationId": "journal_api_journal_get",
+        "parameters": [
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Preview"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalSnapshot"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1464,6 +1508,55 @@
           "lost"
         ],
         "title": "ArmOutcomeCountsOut"
+      },
+      "ArmPoint": {
+        "properties": {
+          "arm": {
+            "type": "string",
+            "title": "Arm"
+          },
+          "ratio": {
+            "type": "number",
+            "title": "Ratio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "arm",
+          "ratio"
+        ],
+        "title": "ArmPoint",
+        "description": "One matured post in an experiment: its outcome as a share of its own frozen forecast."
+      },
+      "ArmSummary": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "typical_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typical Ratio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "n",
+          "typical_ratio"
+        ],
+        "title": "ArmSummary"
       },
       "BriefingData": {
         "properties": {
@@ -1903,36 +1996,6 @@
         ],
         "title": "CountTile"
       },
-      "CoverageRow": {
-        "properties": {
-          "level": {
-            "type": "number",
-            "title": "Level"
-          },
-          "value": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Value"
-          },
-          "n": {
-            "type": "integer",
-            "title": "N"
-          }
-        },
-        "type": "object",
-        "required": [
-          "level",
-          "value",
-          "n"
-        ],
-        "title": "CoverageRow"
-      },
       "CurvePoint": {
         "properties": {
           "age_h": {
@@ -2321,6 +2384,94 @@
           "q90"
         ],
         "title": "Elasticity"
+      },
+      "EntryStats": {
+        "properties": {
+          "followers_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followers Delta"
+          },
+          "followers_expected": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followers Expected"
+          },
+          "impressions": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impressions"
+          },
+          "impressions_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impressions Change"
+          },
+          "posts_scored": {
+            "type": "integer",
+            "title": "Posts Scored"
+          },
+          "posts_in_80": {
+            "type": "integer",
+            "title": "Posts In 80"
+          },
+          "hit_80": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit 80"
+          }
+        },
+        "type": "object",
+        "required": [
+          "followers_delta",
+          "followers_expected",
+          "impressions",
+          "impressions_change",
+          "posts_scored",
+          "posts_in_80",
+          "hit_80"
+        ],
+        "title": "EntryStats"
       },
       "ExpectedRange": {
         "properties": {
@@ -4686,6 +4837,69 @@
         ],
         "title": "I48"
       },
+      "JournalSnapshot": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schema Version",
+            "default": 1
+          },
+          "preview": {
+            "type": "boolean",
+            "title": "Preview"
+          },
+          "site": {
+            "$ref": "#/components/schemas/PublicSite"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/PublicStats"
+          },
+          "followers": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array",
+            "title": "Followers"
+          },
+          "markers": {
+            "items": {
+              "$ref": "#/components/schemas/Marker"
+            },
+            "type": "array",
+            "title": "Markers"
+          },
+          "experiments": {
+            "items": {
+              "$ref": "#/components/schemas/PublicExperiment"
+            },
+            "type": "array",
+            "title": "Experiments"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/PublicEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "method": {
+            "$ref": "#/components/schemas/PublicMethod"
+          }
+        },
+        "type": "object",
+        "required": [
+          "preview",
+          "site",
+          "stats",
+          "followers",
+          "markers",
+          "experiments",
+          "entries",
+          "method"
+        ],
+        "title": "JournalSnapshot"
+      },
       "Kpi": {
         "properties": {
           "value": {
@@ -4733,6 +4947,82 @@
           "expected"
         ],
         "title": "Kpi"
+      },
+      "Marker": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "label"
+        ],
+        "title": "Marker"
+      },
+      "MethodFact": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "MethodFact"
+      },
+      "MethodSection": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/MethodFact"
+            },
+            "type": "array",
+            "title": "Facts"
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/socialmgr__journal__schema__CoverageRow"
+            },
+            "type": "array",
+            "title": "Coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "title",
+          "body",
+          "facts",
+          "coverage"
+        ],
+        "title": "MethodSection"
       },
       "ModelCardOut": {
         "properties": {
@@ -4909,7 +5199,7 @@
           },
           "coverage": {
             "items": {
-              "$ref": "#/components/schemas/CoverageRow"
+              "$ref": "#/components/schemas/socialmgr__api__health_schemas__CoverageRow"
             },
             "type": "array",
             "title": "Coverage"
@@ -6239,6 +6529,654 @@
         ],
         "title": "ProtocolVersionOut"
       },
+      "PublicEntry": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "week_number": {
+            "type": "integer",
+            "title": "Week Number"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Period End"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "draft": {
+            "type": "boolean",
+            "title": "Draft"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "body_markdown": {
+            "type": "string",
+            "title": "Body Markdown"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/EntryStats"
+          },
+          "posts": {
+            "items": {
+              "$ref": "#/components/schemas/PublicPostRow"
+            },
+            "type": "array",
+            "title": "Posts"
+          },
+          "posts_total": {
+            "type": "integer",
+            "title": "Posts Total"
+          },
+          "experiment_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Experiment Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "week_number",
+          "period_start",
+          "period_end",
+          "published_at",
+          "draft",
+          "title",
+          "summary",
+          "body_markdown",
+          "stats",
+          "posts",
+          "posts_total",
+          "experiment_keys"
+        ],
+        "title": "PublicEntry"
+      },
+      "PublicExperiment": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "hypothesis": {
+            "type": "string",
+            "title": "Hypothesis"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "design_label": {
+            "type": "string",
+            "title": "Design Label"
+          },
+          "metric_label": {
+            "type": "string",
+            "title": "Metric Label"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "running",
+              "effect_found",
+              "no_effect",
+              "stopped",
+              "scheduled"
+            ],
+            "title": "Result"
+          },
+          "posts_matured": {
+            "type": "integer",
+            "title": "Posts Matured"
+          },
+          "posts_planned": {
+            "type": "integer",
+            "title": "Posts Planned"
+          },
+          "progress_label": {
+            "type": "string",
+            "title": "Progress Label"
+          },
+          "effect_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Ratio"
+          },
+          "effect_ci80": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Ci80"
+          },
+          "p_better": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Better"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          },
+          "randomization_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Randomization P"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "concluded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concluded At"
+          },
+          "registered_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered At"
+          },
+          "arms": {
+            "items": {
+              "$ref": "#/components/schemas/ArmSummary"
+            },
+            "type": "array",
+            "title": "Arms"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ArmPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          },
+          "why_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why Markdown"
+          },
+          "changed_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed Markdown"
+          },
+          "setup": {
+            "items": {
+              "$ref": "#/components/schemas/MethodFact"
+            },
+            "type": "array",
+            "title": "Setup"
+          },
+          "note_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Slug"
+          },
+          "related_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "slug",
+          "name",
+          "question",
+          "hypothesis",
+          "answer",
+          "design_label",
+          "metric_label",
+          "result",
+          "posts_matured",
+          "posts_planned",
+          "progress_label",
+          "effect_ratio",
+          "effect_ci80",
+          "p_better",
+          "confirmed",
+          "randomization_p",
+          "started_at",
+          "concluded_at",
+          "registered_at",
+          "arms",
+          "points",
+          "why_markdown",
+          "changed_markdown",
+          "setup",
+          "note_slug",
+          "related_keys"
+        ],
+        "title": "PublicExperiment"
+      },
+      "PublicMethod": {
+        "properties": {
+          "headline": {
+            "type": "string",
+            "title": "Headline"
+          },
+          "intro": {
+            "type": "string",
+            "title": "Intro"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/MethodSection"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "model_stage": {
+            "type": "string",
+            "enum": [
+              "prior_only",
+              "owner"
+            ],
+            "title": "Model Stage"
+          },
+          "n_scored": {
+            "type": "integer",
+            "title": "N Scored"
+          }
+        },
+        "type": "object",
+        "required": [
+          "headline",
+          "intro",
+          "sections",
+          "model_stage",
+          "n_scored"
+        ],
+        "title": "PublicMethod"
+      },
+      "PublicPostRow": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "i2h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "I2H"
+          },
+          "i48": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "I48"
+          },
+          "likes_per_1k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Likes Per 1K"
+          },
+          "q10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q10"
+          },
+          "q50": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q50"
+          },
+          "q90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q90"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "above",
+              "as_expected",
+              "below",
+              "provisional"
+            ],
+            "title": "Outcome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "url",
+          "format",
+          "topic",
+          "i2h",
+          "i48",
+          "likes_per_1k",
+          "q10",
+          "q50",
+          "q90",
+          "outcome"
+        ],
+        "title": "PublicPostRow",
+        "description": "A post in a weekly entry's table, against its frozen forecast."
+      },
+      "PublicSite": {
+        "properties": {
+          "handle": {
+            "type": "string",
+            "title": "Handle"
+          },
+          "x_url": {
+            "type": "string",
+            "title": "X Url"
+          },
+          "tagline": {
+            "type": "string",
+            "title": "Tagline"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline"
+          },
+          "intro": {
+            "type": "string",
+            "title": "Intro"
+          },
+          "started_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started On"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "week_number": {
+            "type": "integer",
+            "title": "Week Number"
+          },
+          "site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handle",
+          "x_url",
+          "tagline",
+          "headline",
+          "intro",
+          "started_on",
+          "updated_at",
+          "week_number",
+          "site_url"
+        ],
+        "title": "PublicSite"
+      },
+      "PublicStats": {
+        "properties": {
+          "followers_now": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followers Now"
+          },
+          "followers_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followers Start"
+          },
+          "posts_scored": {
+            "type": "integer",
+            "title": "Posts Scored"
+          },
+          "hit_80": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit 80"
+          },
+          "experiments_total": {
+            "type": "integer",
+            "title": "Experiments Total"
+          },
+          "experiments_with_effect": {
+            "type": "integer",
+            "title": "Experiments With Effect"
+          }
+        },
+        "type": "object",
+        "required": [
+          "followers_now",
+          "followers_start",
+          "posts_scored",
+          "hit_80",
+          "experiments_total",
+          "experiments_with_effect"
+        ],
+        "title": "PublicStats"
+      },
       "Quantiles": {
         "properties": {
           "q05": {
@@ -7115,6 +8053,25 @@
           "below"
         ],
         "title": "ScoredCounts"
+      },
+      "SeriesPoint": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "value"
+        ],
+        "title": "SeriesPoint"
       },
       "Shell": {
         "properties": {
@@ -8004,6 +8961,66 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "socialmgr__api__health_schemas__CoverageRow": {
+        "properties": {
+          "level": {
+            "type": "number",
+            "title": "Level"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "value",
+          "n"
+        ],
+        "title": "CoverageRow"
+      },
+      "socialmgr__journal__schema__CoverageRow": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "target": {
+            "type": "number",
+            "title": "Target"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "target",
+          "value"
+        ],
+        "title": "CoverageRow"
       }
     }
   }
