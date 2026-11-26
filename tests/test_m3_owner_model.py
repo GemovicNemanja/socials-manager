@@ -2,6 +2,7 @@
 diagnostics, recovery of known owner parameters (replicated) and SBC (slow)."""
 
 import math
+import os
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -215,7 +216,10 @@ def test_fit_runtime_for_200_posts() -> None:
     start = time.perf_counter()
     NB2OwnerModel().fit(history, PRIOR, seed=1)
     elapsed = time.perf_counter() - start
-    assert elapsed < 3.0, elapsed  # target < 2 s; measured ~1.0 s on an M-series laptop
+    # Target < 2 s; measured ~1.0 s on an M-series laptop. Shared CI runners are about 3x slower
+    # and noisy, so CI only guards against an order-of-magnitude regression.
+    limit = 10.0 if os.environ.get("CI") else 3.0
+    assert elapsed < limit, elapsed
 
 
 def _recovery(reps: int, n_posts: int) -> dict[str, dict[str, float]]:
