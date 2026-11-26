@@ -11,7 +11,9 @@ const ACTIONS_PORT = 8797;
 const ACTIONS_DATA_DIR = "e2e/.data-actions";
 /** A fourth, mutable backend for the experiment specs: the fixture plus three weeks of a running
  * E03 x E06 factorial (`socialmgr fixture --experiment-demo`), so readouts exist. Its own process,
- * so starting experiments and registering slots can't collide with the actions specs. */
+ * so starting experiments and registering slots can't collide with the actions specs. It also holds
+ * two weekly journal entries (`--journal-demo`: last week published, this week a draft) for the
+ * public journal specs, which read every number from /api/journal first. */
 const EXPERIMENTS_PORT = 8796;
 const EXPERIMENTS_DATA_DIR = "e2e/.data-experiments";
 /**
@@ -37,7 +39,8 @@ const fixtureServer = (dir: string, port: number, flags = "") => ({
 
 /**
  * End-to-end smoke tests against the real backend: a fresh fixture database, the built SPA
- * served by `socialmgr serve`. Run `pnpm build` first (CI and `scripts/check.sh` do).
+ * served by `socialmgr serve` (and the public journal's build at /journal/). Run `pnpm build`
+ * first (CI and `scripts/check.sh` do).
  */
 export default defineConfig({
   testDir: "e2e",
@@ -54,7 +57,7 @@ export default defineConfig({
   webServer: [
     fixtureServer(DATA_DIR, PORT),
     fixtureServer(ACTIONS_DATA_DIR, ACTIONS_PORT),
-    fixtureServer(EXPERIMENTS_DATA_DIR, EXPERIMENTS_PORT, "--experiment-demo"),
+    fixtureServer(EXPERIMENTS_DATA_DIR, EXPERIMENTS_PORT, "--experiment-demo --journal-demo"),
     {
       cwd: "..",
       command:

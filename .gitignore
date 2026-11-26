@@ -19,6 +19,7 @@ data.nosync/
 # Web
 web/node_modules/
 web/dist/
+web/dist-journal/
 
 # OS
 .DS_Store

@@ -41,12 +41,24 @@ def fixture(
             help="Test fixture: also run an E03 x E06 experiment over the last 3 weeks (end-to-end tests)",
         ),
     ] = False,
+    journal_demo: Annotated[
+        bool,
+        typer.Option(
+            "--journal-demo",
+            help="Test fixture: also write last week's journal entry (published) and this week's (draft)",
+        ),
+    ] = False,
 ) -> None:
     """Load a deterministic fixture account by simulating daily runs over fake providers."""
     from sqlalchemy import select
 
     from socialmgr.db.models import Run
-    from socialmgr.services.fixtures import default_until, load_experiment_demo, load_fixture
+    from socialmgr.services.fixtures import (
+        default_until,
+        load_experiment_demo,
+        load_fixture,
+        write_journal_demo,
+    )
     from socialmgr.services.plugins import load_plugins
 
     settings = _settings()
@@ -69,9 +81,11 @@ def fixture(
     with session_scope(session_factory(engine)) as session:
         load = load_experiment_demo if experiment_demo else load_fixture
         summary = load(session, settings, load_plugins(settings), until=end, full=True)
+        written = write_journal_demo(session, settings, end) if journal_demo else []
     typer.echo(
         f"Fixture loaded: {summary.runs} runs, {summary.posts} posts, "
         f"{summary.forecasts} forecasts, {summary.scores} scored"
+        + (f"; {len(written)} journal files written" if journal_demo else "")
     )
 
 

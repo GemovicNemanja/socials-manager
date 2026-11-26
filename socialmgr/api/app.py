@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from socialmgr.services import overview as overview_model
 from socialmgr.services.plugins import ActivePlugins, load_plugins
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
+WEB_JOURNAL_DIST = WEB_DIST.parent / "dist-journal"
 
 
 class _RunTracker:
@@ -48,6 +49,7 @@ class _RunTracker:
 def create_app(
     settings: Settings | None = None,
     web_dist: Path | None = WEB_DIST,
+    journal_dist: Path | None = WEB_JOURNAL_DIST,
     plugins: ActivePlugins | None = None,
     regime_fetcher: Fetcher | Literal["default"] | None = "default",
 ) -> FastAPI:
@@ -292,6 +294,16 @@ def create_app(
         """The public journal's data. ``preview`` (the default here) includes draft entries, marked;
         the published site is built with ``preview=false`` and never contains drafts."""
         return journal_snapshot.build(session, settings, preview=preview)
+
+    # The public site's build, for the owner's preview at /journal/ (it reads /api/journal?preview=true
+    # because the build holds no data.json). Mounted before the dashboard's catch-all.
+    if journal_dist is not None and (journal_dist / "index.html").exists():
+
+        @app.get("/journal", include_in_schema=False)
+        def journal_slash() -> RedirectResponse:
+            return RedirectResponse("/journal/")  # relative asset and data URLs need the slash
+
+        app.mount("/journal", StaticFiles(directory=journal_dist, html=True), name="journal")
 
     if web_dist is not None and (web_dist / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")
