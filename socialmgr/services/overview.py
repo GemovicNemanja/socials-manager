@@ -129,19 +129,8 @@ class Overview(Envelope):
     pending_areas: list[PendingAreaInfo]
 
 
-PENDING: list[PendingAreaInfo] = [
-    PendingAreaInfo(
-        area="follower_forecast",
-        milestone="M3",
-        reason="The follower model (DGLM and Monte Carlo paths) lands in M3; until then only actuals.",
-    ),
-    PendingAreaInfo(
-        area="model_health",
-        milestone="M3",
-        reason="Drift monitors (CUSUM) and calibration tests switch on in M3 at 20 matured posts.",
-    ),
-    PendingAreaInfo(area="goals", milestone="M3", reason="Goal status needs set_goal and the M3 goal model."),
-]
+# Every area the Overview shows has its data since M3; kept for areas a later milestone adds.
+PENDING: list[PendingAreaInfo] = []
 
 
 def _mid_rank(samples: NDArray[np.float64], value: float) -> float:
@@ -412,7 +401,12 @@ def account_scorecard(ov: Overview) -> list[str]:
     t = ov.tiles
     for name, kpi, fmt in (
         ("Impressions, last 7 days", t.impressions_7d, "{:,.0f}"),
-        ("Median 48h impressions, last 21 matured posts", t.median_i48, "{:,.0f}"),
+        (
+            f"Median 48h impressions, last {t.median_i48.n_posts} matured "
+            f"post{'' if t.median_i48.n_posts == 1 else 's'}",
+            t.median_i48,
+            "{:,.0f}",
+        ),
     ):
         if kpi.value is None:
             continue
@@ -433,5 +427,5 @@ def account_scorecard(ov: Overview) -> list[str]:
     )
     if t.followers.now is not None:
         change = f", {t.followers.change_7d:+,} in 7 days" if t.followers.change_7d is not None else ""
-        lines.append(f"Followers: {t.followers.now:,}{change} (follower expectations arrive in M3).")
+        lines.append(f"Followers: {t.followers.now:,}{change}.")
     return lines

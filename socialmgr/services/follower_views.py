@@ -246,7 +246,8 @@ def followers_view(session: Session, settings: Settings) -> h.FollowersOut:
     )
 
     def per_day(v: float | None) -> float | None:
-        return v / days if v is not None and days else None
+        """A rate over the follower history in the last 7 days; none from under a day of history."""
+        return v / days if v is not None and days is not None and days >= 1 else None
 
     fc = latest_forecast(session, owner.id)
     current = goals.current_goals(session, ws).get("followers")
@@ -291,7 +292,8 @@ def followers_view(session: Session, settings: Settings) -> h.FollowersOut:
         ),
         replies_7d=h.CountTile(
             value=float(replies) if replies is not None else None,
-            per_day=per_day(float(replies)) if replies is not None else None,
+            # Posts are known for the full 7 days (the first run back-fills 30), so this is per 7 days.
+            per_day=float(replies) / 7 if replies is not None else None,
             expected=None,
             note=None,
         ),

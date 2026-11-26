@@ -292,7 +292,7 @@ def suggestion_outs(session: Session, settings: Settings, now: datetime) -> list
             primary_metric=v.suggestion.spec.primary_metric,
             horizon_weeks=v.suggestion.spec.horizon_weeks,
             horizon_text=v.suggestion.horizon_text,
-            detectability=v.suggestion.detectability,
+            detectability=f"MODEL §6.10 reference at its planned cadence: {v.suggestion.detectability}",
             mechanism=v.suggestion.mechanism,
             note=v.suggestion.note,
             power=power_out(v.power),

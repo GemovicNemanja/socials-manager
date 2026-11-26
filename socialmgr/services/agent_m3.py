@@ -62,8 +62,12 @@ def _pct(x: float | None) -> str:
 def model_status(session: Session, settings: Settings) -> ModelStatusResponse:
     m = model_views.model_health(session, settings)
     review = m.last_review
+    env = _envelope(session, settings, "")
+    all_n = env["data_sufficiency"].owner_n
     summary = (
-        f"Champion: {m.card.champion} ({m.card.outcome_model}); stage {m.stage}, {m.owner_n} matured posts."
+        f"Champion: {m.card.champion} ({m.card.outcome_model}); stage {m.stage}. "
+        f"{m.owner_n} matured originals and quotes (drift monitors arm at {m.owner_terms_at}); "
+        f"{all_n} matured posts in all, replies included (the model review counts these)."
     )
     if review is None:
         summary += f" First promotion review at {m.first_review_at} matured posts."
