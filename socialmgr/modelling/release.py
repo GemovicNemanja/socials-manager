@@ -239,16 +239,38 @@ def gate_cusum(
     )
 
 
+def calibrated_baseline_width(rows: Sequence[BacktestRow], level: float = 0.8) -> tuple[float, float]:
+    """The baseline's mean 80% width after recalibrating its ranges to cover 80% on this backtest.
+
+    Amendment to MODEL §5 gate 5 (owner, 2026-11-26): on real accounts the trailing median is
+    overconfident (40-52% of outcomes inside its 80% range), so a raw width comparison penalised an
+    honest model. The baseline is lognormal (median m, log-sd s), so its central interval at level L
+    is 2·m·sinh(z_L·s). L* is the level at which its own randomized PITs cover 80%, and each row's
+    width is rescaled from z_0.8 to z_L*. Returns (calibrated mean width, L*).
+    """
+    pits = np.array([r.baseline.pit_rand for r in rows])
+    l_star = float(np.clip(np.quantile(np.abs(2 * pits - 1), level), 0.5, 0.999))
+    z80, z_star = stats.norm.ppf(0.9), stats.norm.ppf((1 + l_star) / 2)
+    widths = []
+    for r in rows:
+        m = max(r.baseline.median, 1e-9)
+        s = math.asinh(r.baseline.width_80 / (2 * m)) / z80
+        widths.append(2 * m * math.sinh(z_star * s))
+    return float(np.mean(widths)), l_star
+
+
 def gate_width(rows: Sequence[BacktestRow], t: GateThresholds) -> GateResult:
     cand = float(np.mean([r.candidate.width_80 for r in rows]))
-    base = float(np.mean([r.baseline.width_80 for r in rows]))
+    raw = float(np.mean([r.baseline.width_80 for r in rows]))
+    base, l_star = calibrated_baseline_width(rows)
     ratio = cand / base if base > 0 else math.inf
     return GateResult(
         "width_80",
         ratio <= t.width_ratio_max,
         ratio,
-        f"mean 80% width <= {t.width_ratio_max} x baseline",
-        f"candidate {_fmt(cand)}, baseline {_fmt(base)}",
+        f"mean 80% width <= {t.width_ratio_max} x the calibrated baseline's",
+        f"candidate {_fmt(cand)}, baseline {_fmt(base)} once recalibrated "
+        f"(raw {_fmt(raw)}; its {l_star:.0%} range covers 80%)",
     )
 
 
