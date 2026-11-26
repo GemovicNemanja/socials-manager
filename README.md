@@ -18,63 +18,58 @@ Know before you read the numbers:
 
 ## Setting it up on your Mac
 
-### 1. Prerequisites
+### One command (teammates start here)
 
-- [uv](https://docs.astral.sh/uv/) (it installs Python 3.13 for you), Node 24 and [pnpm](https://pnpm.io/).
-- [Claude Code](https://claude.com/claude-code), installed and logged in. Runs label new posts with it (headless `claude -p --model haiku`, on your own subscription, no API key). Without it, runs still work; the briefing says labels are pending and the next run retries.
+1. Ask the owner to add your GitHub account to the repository, and accept the invitation (github.com/notifications).
+2. Open Terminal and paste:
 
-### 2. Install
+   ```sh
+   /bin/bash -c "$(curl -fsSL https://gist.githubusercontent.com/GemovicNemanja/e70fb1b2c56f783df32ca1d8967489fb/raw/bootstrap.sh)"
+   ```
 
-```sh
-git clone <repo URL> socials-manager && cd socials-manager
-uv sync
-(cd web && pnpm install && pnpm build)
-uv run socialmgr init        # creates data/socialmgr.sqlite3
-```
+It walks you through everything, in about 10 minutes (most of it is creating your X developer app):
 
-Run every `socialmgr` command from the repo folder: `.env` and the default `data/` folder are read from the current directory.
+- installs what's missing, just for Social Manager: Apple's Command Line Tools (git), GitHub CLI, [uv](https://docs.astral.sh/uv/) and Python 3.13, Node 24 and pnpm, and [Claude Code](https://claude.com/claude-code);
+- signs you in to GitHub in the browser and downloads the code to `~/socials-manager`;
+- asks for your X handle, time zone and whether you have Premium; shows how to create your X developer app (it opens the portal) and asks for its Client ID; asks where backups should go (Proton Drive, iCloud Drive or other synced folders it finds, or this Mac only);
+- connects your X account in the browser, registers the `socialmgr` MCP server with Claude Code for every folder, and signs you in to Claude Code if needed;
+- creates the **Social Manager** app in `~/Applications` (Spotlight: "Social Manager"): opening it starts the server if it isn't running and opens the dashboard;
+- schedules the **daily run** at a time you choose (09:00 by default; a run missed while the Mac sleeps happens on wake) and offers the first run.
 
-### 3. Create your X developer app
+**Updating:** paste the same command again. It pulls the latest code, rebuilds, restarts the server if it was running, and keeps every answer (`--reconfigure` at the end of the command asks again). Running `scripts/install.sh` from the folder does the same.
 
-In the X developer portal:
+The command is `scripts/bootstrap.sh`, published as a public gist because the repository is private. It holds no secrets and no app code. When `scripts/bootstrap.sh` changes, update the gist too (`gh gist edit e70fb1b2c56f783df32ca1d8967489fb scripts/bootstrap.sh`).
 
-1. Create an app. Under **User authentication settings**, choose **OAuth 2.0**, app type **Native App** (a public client, no secret), permissions **Read**.
-2. Callback URI: `http://127.0.0.1:8765/auth/x/callback`. X also asks for a website URL; any URL you own (your X profile is fine) works.
-3. Copy the **OAuth 2.0 Client ID**. You don't need the client secret, API key or bearer token.
-4. Buy API credits and **set a spending limit** in the portal. The X API bills per resource read.
+### By hand
 
-### 4. Configure `.env`
+The installer runs these steps; use them to see or redo one.
 
-```sh
-cp .env.example .env
-```
+1. **Tools:** [uv](https://docs.astral.sh/uv/), Node 24 and [pnpm](https://pnpm.io/), and [Claude Code](https://claude.com/claude-code), installed and signed in. Runs label new posts with it (headless `claude -p --model haiku`, on your own subscription, no API key). Without it, runs still work; the briefing says labels are pending and the next run retries.
+2. **Install:**
 
-Then set at least:
+   ```sh
+   git clone <repo URL> ~/socials-manager && cd ~/socials-manager
+   uv sync
+   (cd web && pnpm install && pnpm build)
+   ```
 
-```sh
-SOCIALMGR_ACCOUNT__HANDLE=@your_handle
-SOCIALMGR_ACCOUNT__TZ=Europe/Belgrade
-SOCIALMGR_BACKUP_DIR="/Users/you/Library/CloudStorage/ProtonDrive-you@proton.me-folder/socialmgr"   # or an iCloud Drive folder
-SOCIALMGR_PLUGINS__PROVIDERS=["x"]
-SOCIALMGR_X__CLIENT_ID=your-client-id
-```
-
-`.env.example` lists every other setting with a comment. Environment variables override `.env`; nested settings use `__`. `.env` is never committed.
-
-### 5. Connect
-
-```sh
-uv run socialmgr connect
-```
-
-It opens X in your browser, waits for you to approve (5 minutes), checks that the account matches `SOCIALMGR_ACCOUNT__HANDLE` and stores the tokens. It listens on port 8765, so stop `socialmgr serve` first. If a run ever says to reconnect, run it again.
+   Keep the folder out of iCloud's Desktop & Documents (see Troubleshooting). Run every `socialmgr` command from the repo folder: `.env` and the default `data/` folder are read from the current directory.
+3. **X developer app**, in the X developer portal: create an app; under **User authentication settings** choose **OAuth 2.0**, app type **Native App** (a public client, no secret), permissions **Read**; callback URI `http://127.0.0.1:8765/auth/x/callback` (any website URL you own, your X profile is fine); copy the **OAuth 2.0 Client ID** (no secret, API key or bearer token needed). Buy API credits and **set a spending limit**: the X API bills per resource read.
+4. **Settings:** `uv run socialmgr setup` asks for them and writes `.env` (or copy `.env.example` to `.env` and set `SOCIALMGR_ACCOUNT__HANDLE`, `SOCIALMGR_ACCOUNT__TZ`, `SOCIALMGR_X__CLIENT_ID`, `SOCIALMGR_PLUGINS__PROVIDERS=["x"]` and `SOCIALMGR_BACKUP_DIR`). `.env.example` lists every setting with a comment. Environment variables override `.env`; nested settings use `__`. `.env` is never committed.
+5. **Connect:** `uv run socialmgr connect` opens X in your browser, waits for you to approve (5 minutes), checks that the account matches `SOCIALMGR_ACCOUNT__HANDLE` and stores the tokens. It listens on port 8765, so stop the server first (`uv run socialmgr stop`). If a run ever says to reconnect, run it again.
+6. **MCP, the app and the daily run:** `uv run socialmgr setup` does all three; see below for each by hand.
 
 ## Daily use
 
-### Run once a day
+### The daily run
+
+The installer schedules it (a launchd job on your Mac). To see, move or remove it:
 
 ```sh
-uv run socialmgr run
+uv run socialmgr schedule              # when it runs; its log is data/logs/daily-run.log
+uv run socialmgr schedule --at 07:30
+uv run socialmgr schedule --off
+uv run socialmgr run                   # run now, by hand
 ```
 
 In order: refresh access and collect posts, metrics and followers → check X's published ranker parameters (`param.rs` in `xai-org/x-algorithm`) for changes → match new posts to planned posts → label → freeze forecasts for posts seen for the first time → score posts that reached 48 hours → refit the maturity curve → write the briefing (printed at the end) → back up.
@@ -85,8 +80,12 @@ Daily is the target, but skipped days are fine: posts are still captured and sco
 
 ### The web app
 
+Open the **Social Manager** app (Spotlight, or `~/Applications`). It starts the server in the background if needed and opens http://127.0.0.1:8765. From Terminal:
+
 ```sh
-uv run socialmgr serve       # http://127.0.0.1:8765
+uv run socialmgr launch      # the same as opening the app
+uv run socialmgr stop        # stop the background server
+uv run socialmgr serve       # or run the server in the foreground
 ```
 
 - **Overview:** KPIs against their expected ranges, followers with their forecast band, recent posts, model health, spend.
@@ -134,22 +133,28 @@ After the first publish, every daily run refreshes the public numbers (followers
 
 ## Using it from Claude Code (MCP)
 
+The installer registers the server for every folder on your Mac. By hand:
+
 ```sh
-claude mcp add socialmgr -- uv run --directory /path/to/socials-manager socialmgr mcp
+claude mcp add --scope user socialmgr -- uv run --quiet --directory /path/to/socials-manager socialmgr mcp
 ```
 
 Tools: `get_briefing`, `start_run`, `get_run_status`, `get_posts`, `get_post`, `get_forecast` (frozen, or a draft for a post you might write), `register_planned_post`, `get_schedule`, `set_label`, `get_account_overview`, `export_data`; experiments (`get_experiments`, `get_experiment`, `power_check`, `propose_experiment`, `register_slots`, `schedule_experiment`, `amend_experiment`, `stop_experiment`, `get_readout`, `list_approvals`); followers, goals and the model (`get_follower_forecast`, `set_goal`, `model_status`, `get_calibration`, `get_monitors`, `acknowledge_alarm`); the journal (`get_journal`, `draft_journal_entry`). Resources: `socialmgr://briefing/latest`, `socialmgr://model/card`. Prompts: `weekly_review` ("summarise last week against the forecasts") and `plan_next_week` (draft forecasts, then freeze the ones you confirm).
 
 Try: *"Use the socialmgr weekly_review prompt"*, *"How did my posts do this week?"*, *"Plan three posts for next week and freeze their forecasts."* No tool can post, like, reply or follow on X, change a frozen forecast or approve anything.
 
-## Backups
+## Your data, and backups
 
-Every run writes a backup to `SOCIALMGR_BACKUP_DIR` (default `data/backups`) and keeps one a day for 14 days and one a week for 12 weeks (`SOCIALMGR_RUN__BACKUP_KEEP_DAILY`, `SOCIALMGR_RUN__BACKUP_KEEP_WEEKLY`). By hand:
+Nothing in Social Manager deletes your history. Frozen forecasts and their draws, scores, metric snapshots, experiment protocols and assignments, model reviews, nowcasts, monitor states, follower forecasts and scores, and goal statuses are append-only: database triggers reject any update or delete. Re-running the installer only upgrades the database (migrations add, never drop).
+
+Every run writes a full backup of the database to `SOCIALMGR_BACKUP_DIR` (default `data/backups`) and mirrors the journal's markdown (weekly entries, experiment notes) into `<backups>/journal`, which only adds and updates files. Old backups are thinned: one a day for 14 days, one a week for 12 weeks, then **one a month for good** (`SOCIALMGR_RUN__BACKUP_KEEP_DAILY`, `SOCIALMGR_RUN__BACKUP_KEEP_WEEKLY`, `SOCIALMGR_RUN__BACKUP_KEEP_MONTHLY_FOREVER`). By hand:
 
 ```sh
 uv run socialmgr backup
-uv run socialmgr restore <backup file>    # replaces the database after an integrity check
+uv run socialmgr restore <backup file>    # backs up the current database, then replaces it after an integrity check
 ```
+
+For analysis outside the app: `export_data` (MCP) or the SQLite file itself (`data/socialmgr.sqlite3`; open it read-only).
 
 ## Trying it with fake data
 

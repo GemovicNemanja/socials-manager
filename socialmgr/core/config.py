@@ -66,6 +66,9 @@ class RunConfig(BaseModel):
     backup: bool = True
     backup_keep_daily: int = Field(default=14, ge=1)
     backup_keep_weekly: int = Field(default=12, ge=0)
+    # Before that: the newest backup of every month is kept for good (frozen forecasts and
+    # assignments can't be recreated). False turns the monthly tier off.
+    backup_keep_monthly_forever: bool = True
 
 
 class JournalConfig(BaseModel):
