@@ -15,6 +15,7 @@ from socialmgr.core.config import PluginConfig, RunConfig, Settings
 from socialmgr.db.models import Forecast, PlannedSlot
 from socialmgr.db.session import make_engine, session_factory
 from socialmgr.labelling.llm import NoLabeler
+from socialmgr.services import runs
 from socialmgr.services.plugins import load_plugins
 from tests.conftest import make_settings
 
@@ -91,7 +92,8 @@ def test_get_briefing_and_run_status(server: Any) -> None:
     assert b["data_sufficiency"]["reason"] == "prior_only_uncalibrated"
     status = call(server, "get_run_status")
     assert status["unfinished"] is None and status["latest"]["status"] == "finished"
-    assert [s["status"] for s in status["latest"]["steps"]][:-1] == ["done"] * 9  # backup skipped in fixtures
+    steps = [s["status"] for s in status["latest"]["steps"]]
+    assert len(steps) == len(runs.STEPS.steps()) and steps[:-1] == ["done"] * (len(steps) - 1)
 
 
 def test_start_run_collects_and_returns_a_new_briefing(server: Any, mcp_settings: Settings) -> None:

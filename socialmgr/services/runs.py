@@ -132,6 +132,13 @@ def _score(ctx: RunContext) -> dict[str, Any]:
     return {"scored": s.scored, "late_maturity": s.late_maturity, "labels": s.labels}
 
 
+@STEPS.register("monitors", "Drift monitors (D1-D3) and alarms")
+def _monitors(ctx: RunContext) -> dict[str, Any]:
+    from socialmgr.services import monitoring
+
+    return monitoring.run_step(ctx.session, ctx.settings, ctx.run, ctx.clock())
+
+
 @STEPS.register("experiments", "Experiment guardrails, week-boundary readouts and e-LOND")
 def _experiments(ctx: RunContext) -> dict[str, Any]:
     from socialmgr.experiments import monitor

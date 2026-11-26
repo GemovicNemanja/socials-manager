@@ -41,6 +41,7 @@ def test_steps_run_in_plan_order(tmp_path: Path) -> None:
         "label",
         "freeze_as_of",
         "score",
+        "monitors",
         "experiments",
         "fit_curve",
         "briefing",

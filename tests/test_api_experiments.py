@@ -256,7 +256,9 @@ def test_readout_cards_and_past_against_blind_forecasts(demo: TestClient) -> Non
     overview = ok(demo.get("/api/experiments"))
     assert [e["key"] for e in overview["running"]] == list(DEMO_SUGGESTIONS)
     for e in overview["running"]:
-        assert e["status"] == "active" and e["latest_look"] == "week-2" and e["week"] == 3
+        assert e["status"] == "active" and e["latest_look"] == "week-2"
+        # The week counts from the real clock, so it grows as the fixture's fixed dates recede.
+        assert e["week"] is not None and e["week"] >= 3
         assert 0 < e["posts_matured"] <= e["slots_assigned"]
         lo, hi = e["effect_interval80"]
         assert lo < e["effect_ratio"] < hi and "×" in e["effect_text"]

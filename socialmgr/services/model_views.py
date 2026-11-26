@@ -16,12 +16,14 @@ from sqlalchemy.orm import Session
 from socialmgr.api import health_schemas as h
 from socialmgr.core.config import Settings
 from socialmgr.db.models import Alarm, Goal, MaturityCurve, ModelReview, MonitorState, Regime, Run
+from socialmgr.modelling.monitors import diagnostics, pits_to_z
 from socialmgr.services import agent, pipeline
 from socialmgr.services.model_data import scored_posts
 
 WINDOW = 63  # MODEL §4.3: diagnostics over the last 63 posts, every 21
 CHECK_EVERY = 21
 BINS = 10
+PIT_EPS = 0.5 / 1001  # PITs come from 1,000 draws (monitors: eps = 0.5/(S+1))
 
 CHART_LABELS = {
     "d1_location": "Location drift, 48h impressions",
@@ -37,35 +39,18 @@ MODEL_LABELS = {
 }
 
 
-def binomial_band(n: int, p: float, level: float = 0.95) -> tuple[float, float] | None:
-    """Central exact binomial band for the hit share of ``n`` posts at nominal rate ``p``."""
-    if n <= 0:
-        return None
-    a = (1 - level) / 2
-    lo, hi = stats.binom.ppf(a, n, p), stats.binom.ppf(1 - a, n, p)
-    return float(lo) / n, float(hi) / n
+def binomial_band(n: int, p: float) -> tuple[float, float] | None:
+    return diagnostics.binomial_band(n, p) if n > 0 else None
 
 
 def berkowitz_p(pits: list[float]) -> float | None:
-    """Berkowitz LR test (3 df) on z = Phi^-1(PIT): AR(1) normal vs iid N(0,1)."""
     if len(pits) < 10:
         return None
-    z = stats.norm.ppf(np.clip(np.asarray(pits), 1e-6, 1 - 1e-6))
-    y, x = z[1:], z[:-1]
-    xm = np.column_stack([np.ones_like(x), x])
-    coef, *_ = np.linalg.lstsq(xm, y, rcond=None)
-    resid = y - xm @ coef
-    sigma2 = max(float(np.mean(resid**2)), 1e-12)
-    ll1 = float(np.sum(stats.norm.logpdf(resid, scale=np.sqrt(sigma2))))
-    ll0 = float(np.sum(stats.norm.logpdf(y)))
-    return float(stats.chi2.sf(max(2 * (ll1 - ll0), 0.0), 3))
+    return diagnostics.berkowitz_test(pits_to_z(pits, PIT_EPS)).p_value
 
 
 def pit_chi2_p(pits: list[float], bins: int = BINS) -> float | None:
-    if len(pits) < 2 * bins:
-        return None
-    counts = np.histogram(np.clip(pits, 0, 1 - 1e-12), bins=bins, range=(0, 1))[0]
-    return float(stats.chisquare(counts).pvalue)
+    return diagnostics.pit_uniformity_test(pits, bins).p_value if len(pits) >= 2 * bins else None
 
 
 def _gate(row: dict[str, Any]) -> h.GateOut:
