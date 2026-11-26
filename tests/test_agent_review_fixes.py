@@ -76,7 +76,11 @@ def test_suggestion_detectability_is_labelled_as_the_reference_figure(
     with loaded() as session:
         listed = experiments.get_experiments(session, settings)
         e03 = next(s for s in listed.suggestions if s.key == "E03")
-        assert e03.detectability.startswith("MODEL §6.10 reference at its planned cadence:")
+        assert e03.detectability.startswith("MODEL §6.10 reference, assuming 3 originals a day for 4 weeks")
+        assert "your own posting rate" in e03.detectability
+        assert all(
+            "assuming " in s.detectability and "assuming :" not in s.detectability for s in listed.suggestions
+        )
 
 
 def test_model_status_separates_originals_from_all_matured_posts(
@@ -86,3 +90,13 @@ def test_model_status_separates_originals_from_all_matured_posts(
     with loaded() as session:
         s = agent_m3.model_status(session, settings).summary
         assert "matured originals and quotes" in s and "matured posts in all, replies included" in s
+
+
+def test_the_prior_only_caveat_is_said_once_and_names_the_40_post_review(
+    loaded: sessionmaker[Session], settings: Settings
+) -> None:
+    """get_account_overview showed 'prior-only until 20 matured posts' next to the 40-post review rule."""
+    with loaded() as session:
+        caveats = agent.get_account_overview(session, settings).caveats
+        prior = [c for c in caveats if "priors only" in c or "prior-only" in c]
+        assert len(prior) == 1 and "first reviewed at 40 matured posts" in prior[0]

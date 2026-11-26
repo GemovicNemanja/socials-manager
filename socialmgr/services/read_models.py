@@ -205,6 +205,18 @@ def _status(score: ScoreRow | None, forecast: Forecast | None, age_h: float) -> 
     return "no_forecast" if forecast is None else "provisional"
 
 
+FIRST_REVIEW_AT = 2 * OWNER_TERMS_MIN_POSTS  # 20 posts to fit, 20 to score (services.model_review)
+
+
+def prior_only_caveat(owner_n: int) -> str:
+    """The one wording of the prior-only caveat, shared by every screen and agent response."""
+    return (
+        "Forecasts still come from priors only: the owner-level model is first reviewed at "
+        f"{FIRST_REVIEW_AT} matured posts and replaces them only if every release gate passes "
+        f"({owner_n} matured so far). Treat ranges as rough."
+    )
+
+
 def list_posts(
     session: Session, settings: Settings, status: StatusFilter = "all", limit: int = 50, offset: int = 0
 ) -> PostsPage:
@@ -309,11 +321,15 @@ def list_posts(
             )
     caveats = ["48h values for posts under 48 hours are estimated with the latest fitted maturity curve"]
     reason = None
-    if owner_n < OWNER_TERMS_MIN_POSTS:
+    latest = session.scalar(
+        select(Forecast)
+        .where(Forecast.workspace_id == settings.workspace_id)
+        .order_by(Forecast.id.desc())
+        .limit(1)
+    )
+    if not (latest and latest.input_manifest.get("calibrated")):
         reason = "prior_only_uncalibrated"
-        caveats.append(
-            f"Forecasts are prior-only until {OWNER_TERMS_MIN_POSTS} matured posts (now {owner_n})"
-        )
+        caveats.append(prior_only_caveat(owner_n))
     return PostsPage(
         as_of=last_run.cutoff_at if last_run else None,
         model_version=model_version,

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from socialmgr.experiments.specs import AppliesTo, ExperimentSpec, FactorSpec
 
 ORIGINALS = ["original", "quote"]
+# MODEL §6.8's power table rows behind most §6.10 figures.
+BASIS_3_A_DAY = "3 originals a day for 4 weeks (n = 84), covariates explaining 30-50% of the variance"
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,8 @@ class Suggestion:
     detectability: str  # MODEL §6.10's detectability column
     mechanism: str
     note: str = ""
+    # The posting rate, horizon and covariate strength MODEL's power figures assume (§6.8 table).
+    reference_basis: str = ""
 
 
 def _s(
@@ -32,6 +36,7 @@ def _s(
     metric: str = "log_i48",
     secondary: tuple[str, ...] = (),
     note: str = "",
+    reference_basis: str = "",
 ) -> Suggestion:
     spec = ExperimentSpec.model_validate(
         {
@@ -45,7 +50,7 @@ def _s(
             "horizon_weeks": horizon_weeks,
         }
     )
-    return Suggestion(key, spec, horizon_text, detectability, mechanism, note)
+    return Suggestion(key, spec, horizon_text, detectability, mechanism, note, reference_basis)
 
 
 SUGGESTIONS: tuple[Suggestion, ...] = (
@@ -62,6 +67,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         ),
         mechanism="Video enters the video index at creation, bypassing the first-like gate.",
         detectability="n = 28: 2x at .37-.61; at 8 weeks .64-.90",
+        reference_basis="1 demo post a day (n = 28 over 4 weeks, 56 over 8), covariates explaining 0-50%",
         horizon_text="4-8 weeks",
         secondary=("follows_per_1k",),
         note="Demo posts only (about 1/day): tag demo slots with content_kind=demo; blocked by 2-day pairs.",
@@ -79,6 +85,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         ),
         mechanism="has_url's effect is learned; Galeazzi reports up to 8x fewer views for links.",
         detectability="Only an effect >= 2x is plausibly detectable",
+        reference_basis="link posts only, a fraction of 3 posts a day over 4-8 weeks",
         horizon_text="4-8 weeks",
         secondary=("link_clicks",),
         note="Link posts only: tag them with link_post=true.",
@@ -90,6 +97,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         FactorSpec(name="hook", lever="hook", control="standard", treatment="outcome_first"),
         mechanism="Thompson sampling on likes per view drives the cold-start lift.",
         detectability="1.5x at .50-.65; 2x at .92-.98",
+        reference_basis=BASIS_3_A_DAY,
         horizon_text="4 weeks",
         secondary=("likes_per_1k",),
     ),
@@ -100,6 +108,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         FactorSpec(name="quote", lever="quote", control="original", treatment="quote_in_niche"),
         mechanism="Quotes count as originals for cold start; the quoted post is embedded.",
         detectability="as E03",
+        reference_basis=BASIS_3_A_DAY,
         horizon_text="4 weeks",
         secondary=("follows",),
         note="Plan for weeks 5-8, factorial with E05.",
@@ -111,6 +120,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         FactorSpec(name="long_post", lever="thread_vs_long", control="thread", treatment="single_long"),
         mechanism="Conversation dedup; self-replies are not indexed; dwell weights.",
         detectability="as E03",
+        reference_basis=BASIS_3_A_DAY,
         horizon_text="4-8 weeks",
         secondary=("profile_clicks", "follows"),
         note="Primary metric is the root post's I48.",
@@ -128,6 +138,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         ),
         mechanism="Media features; the first image is embedded.",
         detectability="1.5x at about .50",
+        reference_basis="3 originals a day for 4 weeks (n = 84), covariates explaining about 30% of variance",
         horizon_text="4 weeks",
     ),
     _s(
@@ -137,6 +148,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         FactorSpec(name="reference", lever="content_kind", control="build_log", treatment="reference"),
         mechanism="Shares weigh heavily; bookmarks and reposts stand in for unobservable shares.",
         detectability="1.5x at .50-.65 over 4 weeks",
+        reference_basis=BASIS_3_A_DAY,
         horizon_text="4-8 weeks",
         secondary=("bookmarks_per_1k", "follows"),
     ),
@@ -147,6 +159,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         FactorSpec(name="peak", lever="posting_window", control="off_peak", treatment="engager_peak"),
         mechanism="Time to first like gates the first-like index.",
         detectability="1.5x at .29-.37; 2x at .65-.78",
+        reference_basis="4-day switchback blocks over 12-16 weeks",
         horizon_text="12-16 weeks",
         horizon_weeks=12.0,
         design="switchback",
@@ -160,6 +173,7 @@ SUGGESTIONS: tuple[Suggestion, ...] = (
         FactorSpec(name="four_a_day", lever="frequency", control="2", treatment="4"),
         mechanism="Author diversity decays as 0.75*0.5^k + 0.25; the ledger shows a plateau.",
         detectability="as E08",
+        reference_basis="4-day switchback blocks over 12-16 weeks",
         horizon_text="12-16 weeks",
         horizon_weeks=12.0,
         design="switchback",
