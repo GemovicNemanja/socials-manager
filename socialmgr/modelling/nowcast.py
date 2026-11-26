@@ -238,8 +238,11 @@ def _truncated_quantiles(dist: _LogDist, lower: float) -> dict[str, float]:
     f_lo = float(dist.cdf(lower))
     out = {}
     for q in QUANTILES:
-        v = float(dist.ppf(np.array([f_lo + q * (1.0 - f_lo)]))[0])
-        out[f"q{round(q * 100):02d}"] = float(math.expm1(max(v, lower)))
+        # When the capture already sits beyond almost all of the predictive mass (a degenerate
+        # pre-publication forecast), the tail quantile is infinite: the count itself is the answer.
+        u = min(f_lo + q * (1.0 - f_lo), 1.0 - 1e-12)
+        v = float(dist.ppf(np.array([u]))[0])
+        out[f"q{round(q * 100):02d}"] = float(math.expm1(max(v, lower) if math.isfinite(v) else lower))
     return out
 
 
