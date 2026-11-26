@@ -17,7 +17,7 @@ from socialmgr.services.pipeline import owner_account
 
 GoalScope = Literal["posts", "followers"]
 METRIC = {"posts": "impressions_48h", "followers": "followers"}
-MAX_FOLLOWER_HORIZON_DAYS = 365
+MAX_FOLLOWER_HORIZON_DAYS = 90  # the follower forecast's longest horizon (MODEL §2c)
 
 
 class GoalError(ValueError):
@@ -59,7 +59,7 @@ def validate(request: GoalRequest, now: datetime) -> None:
         if request.target_at <= now:
             raise GoalError("A follower goal's date must be in the future.")
         if (request.target_at - now).days > MAX_FOLLOWER_HORIZON_DAYS:
-            raise GoalError("Follower goals reach at most a year ahead.")
+            raise GoalError(f"Follower goals reach at most {MAX_FOLLOWER_HORIZON_DAYS} days ahead.")
     elif request.target_at is not None:
         raise GoalError("A posts goal is a 48h impressions target per post; it takes no date.")
 

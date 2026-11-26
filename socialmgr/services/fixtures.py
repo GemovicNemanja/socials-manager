@@ -20,6 +20,13 @@ from socialmgr.services.plugins import ActivePlugins
 
 RUN_HOUR_UTC = 6
 FIXTURE_SKIP = frozenset({"backup"})
+# The follower step (4,000 Monte Carlo paths, ~0.5 s) runs only for the fixture's last days: enough
+# for 7-day follower forecasts to be frozen and scored, without slowing every test that builds one.
+FOLLOWER_DAYS = timedelta(days=10)
+
+
+def _skip(cutoff: datetime, until: datetime) -> frozenset[str]:
+    return FIXTURE_SKIP if cutoff > until - FOLLOWER_DAYS else FIXTURE_SKIP | {"followers"}
 
 
 @dataclass(frozen=True)
@@ -70,7 +77,7 @@ def load_fixture(
             trigger="fixture",
             clock=lambda c=cutoff: c,  # type: ignore[misc]
             cutoff=cutoff,
-            skip=FIXTURE_SKIP,
+            skip=_skip(cutoff, until),
         )
     return FixtureSummary(
         runs=len(times),
@@ -152,7 +159,7 @@ def load_experiment_demo(
             trigger="fixture",
             clock=lambda c=cut: c,  # type: ignore[misc]
             cutoff=cut,
-            skip=FIXTURE_SKIP,
+            skip=_skip(cut, until),
         )
     return FixtureSummary(
         runs=len(run_times(start, until)),

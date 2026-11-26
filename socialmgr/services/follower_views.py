@@ -16,6 +16,7 @@ from socialmgr.db.models import FollowerForecast, FollowerScore, Goal, GoalStatu
 from socialmgr.modelling import scoring
 from socialmgr.services import agent, draws, goals, pipeline
 from socialmgr.services.follower_data import RunInterval, follower_points, run_intervals
+from socialmgr.services.plugins import ActivePlugins
 
 WEEK = timedelta(days=7)
 
@@ -372,8 +373,10 @@ def set_goal(
     )
 
 
-def goal_preview(session: Session, settings: Settings, body: h.GoalIn, now: datetime) -> h.GoalPreviewOut:
-    """Where the member would stand today; filled in by the follower model (see followers step)."""
+def goal_preview(
+    session: Session, settings: Settings, plugins: "ActivePlugins", body: h.GoalIn, now: datetime
+) -> h.GoalPreviewOut:
+    """Where the member would stand today against an unsaved goal (the followers step's model)."""
     from socialmgr.services import follower_step
 
-    return follower_step.preview(session, settings, body, now)
+    return follower_step.preview(session, settings, plugins, body, now)

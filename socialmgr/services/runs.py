@@ -134,9 +134,11 @@ def _score(ctx: RunContext) -> dict[str, Any]:
 
 @STEPS.register("monitors", "Drift monitors (D1-D3) and alarms")
 def _monitors(ctx: RunContext) -> dict[str, Any]:
-    from socialmgr.services import monitoring
+    from socialmgr.services import follower_step, monitoring
 
-    return monitoring.run_step(ctx.session, ctx.settings, ctx.run, ctx.clock())
+    return monitoring.run_step(
+        ctx.session, ctx.settings, ctx.run, ctx.clock(), follower_pits=follower_step.follower_pits
+    )
 
 
 @STEPS.register("experiments", "Experiment guardrails, week-boundary readouts and e-LOND")
@@ -150,6 +152,13 @@ def _experiments(ctx: RunContext) -> dict[str, Any]:
 def _fit_curve(ctx: RunContext) -> dict[str, Any]:
     curve = pipeline.fit_curve(ctx.session, ctx.settings, ctx.run, ctx.clock())
     return {"curve_version": curve.version, "n_pairs": curve.n_pairs}
+
+
+@STEPS.register("followers", "Follower model, frozen follower forecasts and scores, goal status")
+def _followers(ctx: RunContext) -> dict[str, Any]:
+    from socialmgr.services import follower_step
+
+    return follower_step.run_step(ctx.session, ctx.settings, ctx.plugins, ctx.run, ctx.clock())
 
 
 @STEPS.register("briefing", "Write the run briefing")

@@ -44,6 +44,7 @@ def test_steps_run_in_plan_order(tmp_path: Path) -> None:
         "monitors",
         "experiments",
         "fit_curve",
+        "followers",
         "briefing",
         "backup",
     ]

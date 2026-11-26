@@ -281,7 +281,7 @@ def create_app(
     @app.post("/api/goals/preview", tags=["followers"])
     def preview_goal(session: SessionDep, body: health_schemas.GoalIn) -> health_schemas.GoalPreviewOut:
         """Where you'd stand today against a goal you haven't saved: P(goal met), median path."""
-        return follower_views.goal_preview(session, settings, body, datetime.now(UTC))
+        return follower_views.goal_preview(session, settings, active_plugins(), body, datetime.now(UTC))
 
     if web_dist is not None and (web_dist / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")
