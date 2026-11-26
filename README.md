@@ -174,6 +174,7 @@ To label through the Anthropic API instead of Claude Code: `uv sync --extra api`
   ```sh
   rm -rf .venv && mkdir .venv.nosync && ln -s .venv.nosync .venv
   mv data data.nosync && ln -s data.nosync data
+  mv .env .env.nosync && ln -s .env.nosync .env   # keeps your X credentials out of iCloud too
   uv sync
   ```
 
