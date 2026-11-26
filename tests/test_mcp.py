@@ -241,6 +241,7 @@ def test_experiment_tools_end_to_end_and_no_agent_approval(server: Any) -> None:
 def test_m3_tools_goals_model_and_monitors(server: Any) -> None:
     status = call(server, "model_status")
     assert status["stage"] == "prior_only" and status["card"]["champion"] == "nb2"
+    assert "at 40 matured posts" in status["summary"] or "Last review" in status["summary"]
     cal = call(server, "get_calibration")
     assert cal["hit_80"]["n"] > 20 and "80% intervals held" in cal["summary"]
     mon = call(server, "get_monitors")
