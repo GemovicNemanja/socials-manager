@@ -1,14 +1,18 @@
 # Python
 __pycache__/
 *.py[cod]
+.venv
 .venv/
+.venv.nosync/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
 
 # Local data and secrets
 .env
+data
 data/
+data.nosync/
 *.sqlite3
 *.sqlite3-*
 
