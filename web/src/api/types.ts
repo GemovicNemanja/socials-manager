@@ -505,6 +505,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal
+         * @description The public journal's data. ``preview`` (the default here) includes draft entries, marked;
+         *     the published site is built with ``preview=false`` and never contains drafts.
+         */
+        get: operations["journal_api_journal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -632,6 +653,30 @@ export interface components {
              * @default 0
              */
             lost: number;
+        };
+        /**
+         * ArmPoint
+         * @description One matured post in an experiment: its outcome as a share of its own frozen forecast.
+         */
+        ArmPoint: {
+            /** Arm */
+            arm: string;
+            /** Ratio */
+            ratio: number;
+        };
+        /** ArmSummary */
+        ArmSummary: {
+            /** Label */
+            label: string;
+            /**
+             * Control
+             * @default false
+             */
+            control: boolean;
+            /** N */
+            n: number;
+            /** Typical Ratio */
+            typical_ratio: number | null;
         };
         /**
          * BriefingData
@@ -768,15 +813,6 @@ export interface components {
             expected: components["schemas"]["ExpectedVsActual"] | null;
             /** Note */
             note: string | null;
-        };
-        /** CoverageRow */
-        CoverageRow: {
-            /** Level */
-            level: number;
-            /** Value */
-            value: number | null;
-            /** N */
-            n: number;
         };
         /**
          * CurvePoint
@@ -928,6 +964,26 @@ export interface components {
             q10: number;
             /** Q90 */
             q90: number;
+        };
+        /** EntryStats */
+        EntryStats: {
+            /** Followers Delta */
+            followers_delta: number | null;
+            /** Followers Expected */
+            followers_expected: [
+                number,
+                number
+            ] | null;
+            /** Impressions */
+            impressions: number | null;
+            /** Impressions Change */
+            impressions_change: number | null;
+            /** Posts Scored */
+            posts_scored: number;
+            /** Posts In 80 */
+            posts_in_80: number;
+            /** Hit 80 */
+            hit_80: number | null;
         };
         /**
          * ExpectedRange
@@ -1661,6 +1717,28 @@ export interface components {
             /** Method */
             method?: string | null;
         };
+        /** JournalSnapshot */
+        JournalSnapshot: {
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Preview */
+            preview: boolean;
+            site: components["schemas"]["PublicSite"];
+            stats: components["schemas"]["PublicStats"];
+            /** Followers */
+            followers: components["schemas"]["SeriesPoint"][];
+            /** Markers */
+            markers: components["schemas"]["Marker"][];
+            /** Experiments */
+            experiments: components["schemas"]["PublicExperiment"][];
+            /** Entries */
+            entries: components["schemas"]["PublicEntry"][];
+            method: components["schemas"]["PublicMethod"];
+        };
         /** Kpi */
         Kpi: {
             /** Value */
@@ -1670,6 +1748,38 @@ export interface components {
             /** N Posts */
             n_posts: number;
             expected: components["schemas"]["ExpectedRange"] | null;
+        };
+        /** Marker */
+        Marker: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Label */
+            label: string;
+            /** Slug */
+            slug?: string | null;
+        };
+        /** MethodFact */
+        MethodFact: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /** MethodSection */
+        MethodSection: {
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Facts */
+            facts: components["schemas"]["MethodFact"][];
+            /** Coverage */
+            coverage: components["schemas"]["socialmgr__journal__schema__CoverageRow"][];
         };
         /** ModelCardOut */
         ModelCardOut: {
@@ -1729,7 +1839,7 @@ export interface components {
             drift: components["schemas"]["DriftTile"];
             pit: components["schemas"]["PitHistogram"];
             /** Coverage */
-            coverage: components["schemas"]["CoverageRow"][];
+            coverage: components["schemas"]["socialmgr__api__health_schemas__CoverageRow"][];
             /** Width Ratio */
             width_ratio: number | null;
             /** Next Check In Posts */
@@ -2117,6 +2227,188 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** PublicEntry */
+        PublicEntry: {
+            /** Slug */
+            slug: string;
+            /** Week Number */
+            week_number: number;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /** Published At */
+            published_at: string | null;
+            /** Draft */
+            draft: boolean;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Body Markdown */
+            body_markdown: string;
+            stats: components["schemas"]["EntryStats"];
+            /** Posts */
+            posts: components["schemas"]["PublicPostRow"][];
+            /** Posts Total */
+            posts_total: number;
+            /** Experiment Keys */
+            experiment_keys: string[];
+        };
+        /** PublicExperiment */
+        PublicExperiment: {
+            /** Key */
+            key: string;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Question */
+            question: string;
+            /** Hypothesis */
+            hypothesis: string;
+            /** Answer */
+            answer: string | null;
+            /** Design Label */
+            design_label: string;
+            /** Metric Label */
+            metric_label: string;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "running" | "effect_found" | "no_effect" | "stopped" | "scheduled";
+            /** Posts Matured */
+            posts_matured: number;
+            /** Posts Planned */
+            posts_planned: number;
+            /** Progress Label */
+            progress_label: string;
+            /** Effect Ratio */
+            effect_ratio: number | null;
+            /** Effect Ci80 */
+            effect_ci80: [
+                number,
+                number
+            ] | null;
+            /** P Better */
+            p_better: number | null;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Randomization P */
+            randomization_p: number | null;
+            /** Started At */
+            started_at: string | null;
+            /** Concluded At */
+            concluded_at: string | null;
+            /** Registered At */
+            registered_at: string | null;
+            /** Arms */
+            arms: components["schemas"]["ArmSummary"][];
+            /** Points */
+            points: components["schemas"]["ArmPoint"][];
+            /** Why Markdown */
+            why_markdown: string | null;
+            /** Changed Markdown */
+            changed_markdown: string | null;
+            /** Setup */
+            setup: components["schemas"]["MethodFact"][];
+            /** Note Slug */
+            note_slug: string | null;
+            /** Related Keys */
+            related_keys: string[];
+        };
+        /** PublicMethod */
+        PublicMethod: {
+            /** Headline */
+            headline: string;
+            /** Intro */
+            intro: string;
+            /** Sections */
+            sections: components["schemas"]["MethodSection"][];
+            /**
+             * Model Stage
+             * @enum {string}
+             */
+            model_stage: "prior_only" | "owner";
+            /** N Scored */
+            n_scored: number;
+        };
+        /**
+         * PublicPostRow
+         * @description A post in a weekly entry's table, against its frozen forecast.
+         */
+        PublicPostRow: {
+            /** Text */
+            text: string;
+            /** Url */
+            url: string | null;
+            /** Posted At */
+            posted_at?: string | null;
+            /** Format */
+            format: string | null;
+            /** Topic */
+            topic: string | null;
+            /** I2H */
+            i2h: number | null;
+            /** I48 */
+            i48: number | null;
+            /** Likes Per 1K */
+            likes_per_1k: number | null;
+            /** Q10 */
+            q10: number | null;
+            /** Q50 */
+            q50: number | null;
+            /** Q90 */
+            q90: number | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "above" | "as_expected" | "below" | "provisional";
+        };
+        /** PublicSite */
+        PublicSite: {
+            /** Handle */
+            handle: string;
+            /** X Url */
+            x_url: string;
+            /** Tagline */
+            tagline: string;
+            /** Headline */
+            headline: string;
+            /** Intro */
+            intro: string;
+            /** Started On */
+            started_on: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Week Number */
+            week_number: number;
+            /** Site Url */
+            site_url: string | null;
+        };
+        /** PublicStats */
+        PublicStats: {
+            /** Followers Now */
+            followers_now: number | null;
+            /** Followers Start */
+            followers_start: number | null;
+            /** Posts Scored */
+            posts_scored: number;
+            /** Hit 80 */
+            hit_80: number | null;
+            /** Experiments Total */
+            experiments_total: number;
+            /** Experiments With Effect */
+            experiments_with_effect: number;
+        };
         /** Quantiles */
         Quantiles: {
             /** Q05 */
@@ -2406,6 +2698,16 @@ export interface components {
              * @default 0
              */
             below: number;
+        };
+        /** SeriesPoint */
+        SeriesPoint: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Value */
+            value: number;
         };
         /** Shell */
         Shell: {
@@ -2700,6 +3002,24 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** CoverageRow */
+        socialmgr__api__health_schemas__CoverageRow: {
+            /** Level */
+            level: number;
+            /** Value */
+            value: number | null;
+            /** N */
+            n: number;
+        };
+        /** CoverageRow */
+        socialmgr__journal__schema__CoverageRow: {
+            /** Label */
+            label: string;
+            /** Target */
+            target: number;
+            /** Value */
+            value: number | null;
         };
     };
     responses: never;
@@ -3526,6 +3846,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoalPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_api_journal_get: {
+        parameters: {
+            query?: {
+                preview?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalSnapshot"];
                 };
             };
             /** @description Validation Error */

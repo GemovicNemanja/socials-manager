@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
@@ -15,12 +15,15 @@ from socialmgr import __version__
 from socialmgr.api import health_schemas, schemas
 from socialmgr.core.config import Settings
 from socialmgr.db.session import make_engine, session_factory
+from socialmgr.journal import snapshot as journal_snapshot
+from socialmgr.journal.schema import JournalSnapshot
 from socialmgr.modelling.regimes import Fetcher, github_fetcher
 from socialmgr.services import agent, experiment_views, follower_views, model_views, post_detail, read_models
 from socialmgr.services import overview as overview_model
 from socialmgr.services.plugins import ActivePlugins, load_plugins
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
+WEB_JOURNAL_DIST = WEB_DIST.parent / "dist-journal"
 
 
 class _RunTracker:
@@ -46,6 +49,7 @@ class _RunTracker:
 def create_app(
     settings: Settings | None = None,
     web_dist: Path | None = WEB_DIST,
+    journal_dist: Path | None = WEB_JOURNAL_DIST,
     plugins: ActivePlugins | None = None,
     regime_fetcher: Fetcher | Literal["default"] | None = "default",
 ) -> FastAPI:
@@ -282,6 +286,24 @@ def create_app(
     def preview_goal(session: SessionDep, body: health_schemas.GoalIn) -> health_schemas.GoalPreviewOut:
         """Where you'd stand today against a goal you haven't saved: P(goal met), median path."""
         return follower_views.goal_preview(session, settings, active_plugins(), body, datetime.now(UTC))
+
+    # ------------------------------------------------------------ public journal (M4)
+
+    @app.get("/api/journal", tags=["journal"])
+    def journal(session: SessionDep, preview: bool = True) -> JournalSnapshot:
+        """The public journal's data. ``preview`` (the default here) includes draft entries, marked;
+        the published site is built with ``preview=false`` and never contains drafts."""
+        return journal_snapshot.build(session, settings, preview=preview)
+
+    # The public site's build, for the owner's preview at /journal/ (it reads /api/journal?preview=true
+    # because the build holds no data.json). Mounted before the dashboard's catch-all.
+    if journal_dist is not None and (journal_dist / "index.html").exists():
+
+        @app.get("/journal", include_in_schema=False)
+        def journal_slash() -> RedirectResponse:
+            return RedirectResponse("/journal/")  # relative asset and data URLs need the slash
+
+        app.mount("/journal", StaticFiles(directory=journal_dist, html=True), name="journal")
 
     if web_dist is not None and (web_dist / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")

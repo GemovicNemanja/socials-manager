@@ -181,6 +181,23 @@ def _briefing(ctx: RunContext) -> dict[str, Any]:
     return {"briefing_id": b.id}
 
 
+@STEPS.register("journal", "Refresh the public journal's numbers (once an entry is published)")
+def _journal(ctx: RunContext) -> dict[str, Any]:
+    from socialmgr.journal import site
+
+    cfg = ctx.settings.journal
+    if not cfg.repo or not cfg.auto_refresh:
+        return {"skipped": "no public repository configured" if not cfg.repo else "auto refresh off"}
+    if not site.has_published_entry(ctx.settings):
+        return {"skipped": "nothing published yet: the first publish is yours (socialmgr journal publish)"}
+    try:
+        ctx.session.commit()  # the site reads this run's data
+        result = site.publish(ctx.session, ctx.settings, ctx.clock())
+    except Exception as exc:  # a failed publish is a caveat, never a failed run
+        return {"published": False, "caveats": [f"Journal refresh failed: {exc}"]}
+    return {"published": result.changed, "commit": result.commit, "url": result.url}
+
+
 @STEPS.register("backup", "Back up the database")
 def _backup(ctx: RunContext) -> dict[str, Any]:
     from socialmgr.services import backups

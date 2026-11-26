@@ -47,6 +47,8 @@ TOOLS = {
     "get_calibration",
     "get_monitors",
     "acknowledge_alarm",
+    "get_journal",
+    "draft_journal_entry",
 }
 ENVELOPE = {"summary", "confidence", "as_of", "model_version", "regime_id", "data_sufficiency", "caveats"}
 
@@ -257,3 +259,14 @@ def test_m3_tools_goals_model_and_monitors(server: Any) -> None:
     assert ff["tiles"]["followers"]["value"] and ff["goal"]["goal"]["target"] == 900
     card = list(asyncio.run(server.read_resource("socialmgr://model/card")))
     assert "Model card: nb2" in str(card[0].content)
+
+
+def test_journal_tools_draft_locally_and_cannot_publish(server: Any) -> None:
+    empty = call(server, "get_journal")
+    assert empty["entries"] == [] and "Not published anywhere yet" in empty["summary"]
+    drafted = call(server, "draft_journal_entry", week=0)
+    assert drafted["written"] and drafted["entry"]["status"] == "draft" and "TODO" in drafted["markdown"]
+    listed = call(server, "get_journal")
+    assert [e["status"] for e in listed["entries"]] == ["draft"]
+    tools = {t.name for t in asyncio.run(server.list_tools())}
+    assert not any("publish" in name for name in tools)

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes } from "react";
 import { cx } from "../lib/cx";
 import { icons, type IconName } from "./icons";
 
@@ -51,5 +51,22 @@ export function Button({
         {label}
       </span>
     </button>
+  );
+}
+
+export interface ButtonLinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "children"> {
+  label: string;
+  variant?: ButtonVariant;
+}
+
+/** A link that looks like a Button, for navigation such as "Follow on X". */
+export function ButtonLink({ label, variant = "default", className, ...rest }: ButtonLinkProps) {
+  return (
+    <a
+      className={cx("flex items-center gap-1.5 rounded-sm border font-sans", rootByVariant[variant], className ?? "h-7 w-fit")}
+      {...rest}
+    >
+      <span className={cx("text-xs leading-normal font-medium whitespace-nowrap", labelByVariant[variant])}>{label}</span>
+    </a>
   );
 }

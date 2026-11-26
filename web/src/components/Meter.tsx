@@ -7,11 +7,13 @@ export interface MeterProps {
   /** Filled share, 0..1. */
   fraction?: number;
   fill?: Swatch;
+  /** Optional target share, 0..1, drawn as a tick on the bar. */
+  target?: number;
   className?: string;
 }
 
 /** Labelled thin meter: name and value above a 3px bar. */
-export function Meter({ label = "80% range hit rate", value = "78% n=63", fraction = 0.5, fill = "neutral", className }: MeterProps) {
+export function Meter({ label = "80% range hit rate", value = "78% n=63", fraction = 0.5, fill = "neutral", target, className }: MeterProps) {
   const pct = Math.min(100, Math.max(0, fraction * 100));
   return (
     <div className={cx("flex flex-col gap-[5px] font-sans", className ?? "w-[360px] shrink-0")}>
@@ -28,6 +30,13 @@ export function Meter({ label = "80% range hit rate", value = "78% n=63", fracti
         className="relative h-[3px] w-full bg-surface"
       >
         <div className={cx("absolute top-0 left-0 h-[3px]", swatchBg[fill])} style={{ width: `${pct}%` }} />
+        {target != null && (
+          <div
+            aria-hidden
+            className="absolute -top-[3px] h-[9px] w-px bg-faint"
+            style={{ left: `${Math.min(100, Math.max(0, target * 100))}%` }}
+          />
+        )}
       </div>
     </div>
   );

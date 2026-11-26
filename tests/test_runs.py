@@ -48,6 +48,7 @@ def test_steps_run_in_plan_order(tmp_path: Path) -> None:
         "fit_curve",
         "followers",
         "briefing",
+        "journal",
         "backup",
     ]
     settings = _settings(tmp_path)

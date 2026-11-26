@@ -313,6 +313,21 @@ def create_server(
         with session() as s:
             return agent_m3.acknowledge_alarm(s, settings, alarm_id, note)
 
+    @tool(READ)
+    def get_journal() -> agent_m3.JournalResponse:
+        """The public journal: weekly entries (draft or published), where the site lives, and the
+        public numbers it shows. Only published entries are ever public."""
+        with session() as s:
+            return agent_m3.get_journal(s, settings)
+
+    @tool(WRITE_LOCAL)
+    def draft_journal_entry(week: int | None = None) -> agent_m3.JournalDraftResponse:
+        """Draft a weekly journal entry from that week's data (week 0 introduces the plan) as a local
+        markdown file with TODOs for the member's own words. Overwrites only an unpublished draft.
+        Publishing is the member's: no tool can make anything public."""
+        with session() as s:
+            return agent_m3.draft_journal_entry(s, settings, week)
+
     @server.resource("socialmgr://model/card", mime_type="text/plain")
     def model_card() -> str:
         """The champion's model card and its last release gates."""

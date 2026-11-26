@@ -1,4 +1,5 @@
 import type { ChangeEntry, ChartPoint, FollowerForecast } from "../api/models";
+import { niceMax } from "../lib/chart";
 import { cx } from "../lib/cx";
 import { formatDateTime, formatDay, formatInt } from "../lib/format";
 import { LegendItem } from "./LegendItem";
@@ -8,13 +9,6 @@ const DAY = 24 * 3600 * 1000;
 const W = 800;
 const H = 220;
 
-/** The axis top: the smallest step whose quarters are round numbers (ticks sit at quarters). */
-function niceMax(value: number): number {
-  if (value <= 0) return 10;
-  const step = 10 ** Math.floor(Math.log10(value));
-  for (const m of [1, 2, 2.5, 4, 5, 6, 8, 10]) if (m * step >= value) return m * step;
-  return 10 * step;
-}
 
 /** Linear interpolation of the band at time t (clamped to its ends). */
 function bandAt(band: FollowerForecast["band"], t: number) {

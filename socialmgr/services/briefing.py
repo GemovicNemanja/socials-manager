@@ -56,7 +56,8 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
         caveats += result(name).get("caveats", [])
     previous = pipeline.last_finished_run(session, settings.workspace_id, before=run.cutoff_at)
     if previous is not None:
-        caveats += (previous.steps or {}).get("backup", {}).get("result", {}).get("caveats", [])
+        for late_step in ("journal", "backup"):  # these run after the briefing
+            caveats += (previous.steps or {}).get(late_step, {}).get("result", {}).get("caveats", [])
     from socialmgr.services.overview import account_scorecard, overview
 
     account = account_scorecard(overview(session, settings, now=run.cutoff_at))

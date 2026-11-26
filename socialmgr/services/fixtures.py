@@ -4,6 +4,7 @@ import dataclasses
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -181,3 +182,83 @@ def load_experiment_demo(
         forecasts=session.scalar(select(func.count(Forecast.id))) or 0,
         scores=session.scalar(select(func.count(ScoreRow.id))) or 0,
     )
+
+
+# ---------------------------------------------------------------- journal demo (test fixture only)
+
+JOURNAL_DEMO_PUBLISHED = """The first full week of the experiments. Two changes ran side by side:
+an **outcome-first hook** against my usual opening, and an *image* against text only.
+
+## What happened
+
+Neither has moved far from 1× yet, and the 80% intervals still straddle it,
+so I'm letting both run to the end of the plan.
+
+- Followers grew roughly in line with the frozen forecast.
+- Most posts landed inside their range; the misses were short text posts.
+- One post was a [thread on forecasting](https://x.com/your_account), which did best.
+
+## Next week
+
+1. Keep posting three originals a day at the slot times.
+2. Write the `why I tested it` notes before the readouts come in.
+
+<script>alert("raw HTML is shown as text, never run")</script>
+"""
+
+JOURNAL_DEMO_DRAFT = """This week's note is still a draft: the numbers are in, the words aren't.
+
+TODO: say what surprised me this week.
+"""
+
+JOURNAL_DEMO_NOTES = """## Why I tested it
+
+An outcome-first opening tells a reader **what they get** before asking for their attention;
+X's ranker rewards early likes, so the hook should show up in *reach*, not only in the like rate.
+"""
+
+
+def write_journal_demo(session: Session, settings: Settings, now: datetime) -> list[Path]:
+    """Weekly entries for the public journal's end-to-end tests: last week published, this week a draft.
+
+    The published entry mentions every experiment in the database and its body uses each markdown
+    feature the public site renders (headings, lists, links, emphasis, code) plus a raw HTML line
+    that must stay text. E03, when it exists, gets an owner-written "Why I tested it" note.
+    """
+    from socialmgr.db.models import Experiment
+    from socialmgr.journal import drafts
+    from socialmgr.journal import entries as je
+
+    start_day = drafts.started_on(session, settings)
+    if start_day is None:
+        raise je.EntryError("the journal demo needs at least one run (load a fixture first)")
+    current = max((now.date() - start_day).days // 7, 0)
+    keys = list(session.scalars(select(Experiment.key).order_by(Experiment.created_at)))
+    written: list[Path] = []
+    plan: list[tuple[int, str, datetime | None, str, str]] = [
+        (current, "draft", None, JOURNAL_DEMO_DRAFT, "This week, in progress")
+    ]
+    if current > 0:
+        title = "Two experiments running, and the forecasts mostly held"
+        plan.append((current - 1, "published", now - timedelta(hours=12), JOURNAL_DEMO_PUBLISHED, title))
+    for week, status, published_at, body, title in plan:
+        period_start, period_end = drafts.week_bounds(start_day, week)
+        entry = je.Entry(
+            path=je.path_for(settings.journal_dir, week),
+            title=title,
+            week=week,
+            period_start=period_start,
+            period_end=period_end,
+            status=status,
+            published_at=published_at,
+            experiments=keys if status == "published" else [],
+            body=body,
+        )
+        je.save(entry)
+        written.append(entry.path)
+    if "E03" in keys:
+        notes = settings.journal_dir / "experiments" / "e03.md"
+        notes.parent.mkdir(parents=True, exist_ok=True)
+        notes.write_text(JOURNAL_DEMO_NOTES, encoding="utf-8")
+        written.append(notes)
+    return written
