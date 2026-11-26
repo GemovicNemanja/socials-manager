@@ -148,7 +148,15 @@ To label through the Anthropic API instead of Claude Code: `uv sync --extra api`
 
 ## Troubleshooting
 
-- **`ModuleNotFoundError: No module named 'socialmgr'` from `uv run socialmgr`.** macOS sometimes marks the virtualenv's `.pth` files hidden, and Python 3.13 skips hidden `.pth` files. Fix: `chflags nohidden .venv/lib/python3.13/site-packages/*.pth`. Or run the CLI as `uv run python -m socialmgr <command>` from the repository folder, which doesn't depend on them.
+- **`ModuleNotFoundError: No module named 'socialmgr'` from `uv run socialmgr`.** macOS marked the virtualenv's `.pth` files hidden, and Python 3.13 skips hidden `.pth` files. This happens when the repository sits in a folder iCloud syncs (Desktop & Documents): iCloud hides and evicts files inside `.venv`, and it can evict or conflict-copy the SQLite database too. Keep both out of sync (iCloud skips folders ending in `.nosync`):
+
+  ```sh
+  rm -rf .venv && mkdir .venv.nosync && ln -s .venv.nosync .venv
+  mv data data.nosync && ln -s data.nosync data
+  uv sync
+  ```
+
+  Outside iCloud, `chflags nohidden .venv/lib/python3.13/site-packages/*.pth` is enough.
 - **"Run `socialmgr connect`" in a briefing.** X refused the stored sign-in (revoked, or unused for too long). Run `socialmgr connect` again; nothing else is lost.
 - **One install per account.** X refresh tokens are single-use: don't run two copies of the same data folder (for example a second checkout with a copied `data/`), or one will sign the other out.
 
