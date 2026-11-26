@@ -263,6 +263,10 @@ experiments_app = typer.Typer(
 )
 app.add_typer(experiments_app, name="experiments")
 
+from socialmgr.journal.cli import journal_app  # noqa: E402  (sub-app registration)
+
+app.add_typer(journal_app, name="journal")
+
 
 def _db() -> tuple[Settings, sessionmaker[Session]]:
     settings = _settings()

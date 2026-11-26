@@ -88,6 +88,8 @@ class JournalConfig(BaseModel):
         "didn't, including the experiments that went nowhere."
     )
     auto_refresh: bool = True  # each run republishes the numbers once an entry has been published
+    author_name: str | None = None  # git identity for site commits; default: this repo's git config
+    author_email: str | None = None
 
 
 class Settings(BaseSettings):

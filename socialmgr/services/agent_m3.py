@@ -3,10 +3,12 @@ wrapped in the agent envelope with a templated summary."""
 
 from datetime import UTC, datetime
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from socialmgr.api import health_schemas as h
 from socialmgr.core.config import Settings
+from socialmgr.journal import entries as je
 from socialmgr.services import follower_views, model_views
 from socialmgr.services.agent import AgentResponse, _envelope
 
@@ -184,3 +186,82 @@ def model_card_text(session: Session, settings: Settings) -> str:
             for g in m.last_review.gates
         ]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- public journal (M4)
+
+
+class JournalEntryOut(BaseModel):
+    week: int
+    title: str
+    status: str  # draft | published
+    published_at: datetime | None
+    path: str
+    summary: str
+
+
+class JournalResponse(AgentResponse):
+    site_url: str | None
+    entries: list[JournalEntryOut]
+    published_stats: dict[str, float | int | None]
+
+
+class JournalDraftResponse(AgentResponse):
+    written: bool
+    entry: JournalEntryOut | None
+    markdown: str | None
+
+
+def _entry_out(e: je.Entry) -> JournalEntryOut:
+    return JournalEntryOut(
+        week=e.week,
+        title=e.title,
+        status="published" if e.published else "draft",
+        published_at=e.published_at,
+        path=str(e.path),
+        summary=e.summary,
+    )
+
+
+def get_journal(session: Session, settings: Settings) -> JournalResponse:
+    from socialmgr.journal import snapshot
+
+    rows = je.load_all(settings.journal_dir)
+    snap = snapshot.build(session, settings, preview=False)
+    published = [e for e in rows if e.published]
+    summary = (
+        f"{len(published)} published entr{'y' if len(published) == 1 else 'ies'}, "
+        f"{len(rows) - len(published)} draft(s). "
+        + (
+            f"Live at {settings.journal.site_url}."
+            if settings.journal.site_url
+            else "Not published anywhere yet."
+        )
+    )
+    return JournalResponse(
+        **_envelope(session, settings, summary),
+        site_url=settings.journal.site_url,
+        entries=[_entry_out(e) for e in rows],
+        published_stats=snap.stats.model_dump(),
+    )
+
+
+def draft_journal_entry(session: Session, settings: Settings, week: int | None) -> JournalDraftResponse:
+    from socialmgr.journal import drafts
+
+    try:
+        entry = drafts.draft_week(session, settings, week)
+    except je.EntryError as exc:
+        return JournalDraftResponse(
+            **_envelope(session, settings, str(exc)), written=False, entry=None, markdown=None
+        )
+    summary = (
+        f"Draft for week {entry.week} written to {entry.path}. Fill in the TODOs with the member, then they "
+        "publish it themselves (socialmgr journal publish --week N); agents can't publish."
+    )
+    return JournalDraftResponse(
+        **_envelope(session, settings, summary),
+        written=True,
+        entry=_entry_out(entry),
+        markdown=je.render(entry),
+    )
