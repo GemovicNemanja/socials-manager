@@ -16,6 +16,7 @@ import { icons } from "../components/icons";
 import { Toggle } from "../components/Toggle";
 import { formatInt, formatLabel } from "../lib/format";
 import { defaultPlannedAt, utcToZonedInput, zoneAbbreviation, zonedInputToUtc } from "../lib/time";
+import { useDebounced } from "../lib/useDebounced";
 import { useNow } from "../lib/useNow";
 
 const CalendarIcon = icons.ActionCalendar;
@@ -37,15 +38,6 @@ const TOPICS = [
   "personal",
   "other",
 ] as const satisfies readonly PlannedTopic[];
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebounced(value), ms);
-    return () => window.clearTimeout(id);
-  }, [value, ms]);
-  return debounced;
-}
 
 export interface RegisterPlannedPostDialogProps {
   tz: string;

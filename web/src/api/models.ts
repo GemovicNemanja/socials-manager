@@ -83,3 +83,26 @@ export type RegisterSlotsRequest = PostBody<"/api/experiments/slots">;
 export type DayPlanIn = RegisterSlotsRequest["days"][number];
 export type RegisterSlotsResponse = PostOk<"/api/experiments/slots">;
 export type DecideResponse = PostOk<"/api/approvals/{approval_id}/approve">;
+
+export type ModelHealth = JsonOk<"/api/model">;
+export type HitRateTile = ModelHealth["hit_80"];
+export type ModelCard = ModelHealth["card"];
+export type ModelReview = NonNullable<ModelHealth["last_review"]>;
+export type ReleaseGate = ModelReview["gates"][number];
+export type ChangeEntry = ModelHealth["changes"][number];
+export type MonitorChart = ModelHealth["monitors"][number];
+export type ChartPoint = MonitorChart["series"][number];
+export type DetectorAlarm = ModelHealth["alarms"][number];
+export type AckResponse = PostOk<"/api/alarms/{alarm_id}/ack">;
+
+export type FollowersResponse = JsonOk<"/api/followers">;
+export type CountTile = FollowersResponse["tiles"]["followers"];
+export type FollowerForecast = NonNullable<FollowersResponse["forecast"]>;
+export type FollowerScore = FollowersResponse["past"][number];
+export type FunnelStep = FollowersResponse["funnel"][number];
+export type GoalStatus = NonNullable<FollowersResponse["goal"]>;
+export type GoalsResponse = JsonOk<"/api/goals">;
+export type GoalRequest = PostBody<"/api/goals">;
+export type GoalScope = GoalRequest["scope"];
+export type GoalSetResponse = PostOk<"/api/goals">;
+export type GoalPreview = PostOk<"/api/goals/preview">;

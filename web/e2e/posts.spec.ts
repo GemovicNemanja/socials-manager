@@ -54,11 +54,12 @@ test.describe("Posts screen against the real backend", () => {
     expect(await rows.count()).toBeLessThan(50);
   });
 
-  test("other screens are placeholders until their milestone", async ({ page }) => {
+  test("the sidebar reaches the Forecasts screen; no screen is a placeholder", async ({ page }) => {
     await page.goto("/#/posts");
     await page.getByRole("navigation", { name: "Main" }).getByText("Forecasts", { exact: true }).click();
     await expect(page.getByRole("heading", { name: "Forecasts" })).toBeVisible();
-    await expect(page.locator("p", { hasText: "arrives in" })).toContainText("Forecasts arrives in M3");
+    await expect(page.getByRole("region", { name: "Model health" })).toBeVisible();
+    await expect(page.locator("p", { hasText: "arrives in" })).toHaveCount(0);
   });
 
   test("full-page screenshot for visual review", async ({ page }) => {
