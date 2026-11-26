@@ -9,6 +9,7 @@ it never force-pushes and never touches the app's own repository.
 
 import html
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -88,23 +89,38 @@ def build(
         dest = out_dir / child.name
         shutil.copytree(child, dest) if child.is_dir() else shutil.copy2(child, dest)
     title = f"{snap.site.handle} · {snap.site.tagline}"
-    page = entry_html.read_text(encoding="utf-8")
-    meta = (
-        f'<meta property="og:title" content="{html.escape(title)}" />\n'
-        f'<meta property="og:description" content="{html.escape(snap.site.headline)}" />\n'
-        f'<meta name="description" content="{html.escape(snap.site.headline)}" />\n'
-    )
-    if snap.site.site_url:
-        meta += f'<meta property="og:url" content="{html.escape(snap.site.site_url)}" />\n'
-    page = page.replace("</head>", meta + "</head>", 1)
-    if "<title>" in page:
-        start, end = page.index("<title>"), page.index("</title>") + len("</title>")
-        page = page[:start] + f"<title>{html.escape(title)}</title>" + page[end:]
+    page = _set_meta(entry_html.read_text(encoding="utf-8"), title, snap.site.headline, snap.site.site_url)
     (out_dir / "index.html").write_text(page, encoding="utf-8")
     (out_dir / "data.json").write_text(json.dumps(snap.model_dump(mode="json"), indent=1), encoding="utf-8")
     (out_dir / ".nojekyll").write_text("", encoding="utf-8")  # serve files that start with "_"
     drafts = [e for e in je.load_all(settings.journal_dir) if not e.published]
     return BuildResult(out_dir=out_dir, entries=len(snap.entries), drafts_left_out=len(drafts))
+
+
+def _set_meta(page: str, title: str, description: str, url: str | None) -> str:
+    """Set the title and share tags, replacing the generic ones the page ships with."""
+    tags = {
+        ('name="description"'): description,
+        ('property="og:title"'): title,
+        ('property="og:description"'): description,
+    }
+    if url:
+        tags['property="og:url"'] = url
+    for attr, value in tags.items():
+        tag = f'<meta {attr} content="{html.escape(value)}" />'
+        found = re.search(rf"<meta\s+{re.escape(attr)}[^>]*>", page)
+        page = (
+            page[: found.start()] + tag + page[found.end() :]
+            if found
+            else page.replace("</head>", tag + "\n</head>", 1)
+        )
+    title_tag = f"<title>{html.escape(title)}</title>"
+    found = re.search(r"<title>.*?</title>", page, flags=re.S)
+    return (
+        page[: found.start()] + title_tag + page[found.end() :]
+        if found
+        else page.replace("</head>", title_tag + "</head>", 1)
+    )
 
 
 def checkout_dir(settings: Settings) -> Path:

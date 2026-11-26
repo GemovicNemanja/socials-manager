@@ -50,9 +50,12 @@ def _result(session: Session, settings: Settings, exp: Experiment) -> j.Experime
     return "effect_found" if "adopt" in decisions else "no_effect"
 
 
-def _question(hypothesis: str) -> str:
-    text = hypothesis.strip().rstrip(".")
-    return text if text.endswith("?") else f"Does it hold that {text[0].lower()}{text[1:]}?"
+def _arm_label(value: str) -> str:
+    return value.replace("_", " ").strip().capitalize()
+
+
+def _day(d: datetime) -> str:
+    return f"{d:%b} {d.day}"
 
 
 def public_experiment(
@@ -65,8 +68,8 @@ def public_experiment(
     readout = detail.readout
     factor = readout.factors[0] if readout and readout.factors else None
     first = exp.factors[0] if exp.factors else {}
-    control_label = str(first.get("control", "control"))
-    treatment_label = str(first.get("treatment", "treatment"))
+    control_label = _arm_label(str(first.get("control", "control")))
+    treatment_label = _arm_label(str(first.get("treatment", "treatment")))
     name = str(first.get("name", ""))
     points: list[j.ArmPoint] = []
     ratios: dict[str, list[float]] = {control_label: [], treatment_label: []}
@@ -80,12 +83,15 @@ def public_experiment(
     arms = [
         j.ArmSummary(
             label=lbl,
+            control=lbl == control_label,
             n=len(vals),
             typical_ratio=round(statistics.median(vals), 3) if vals else None,
         )
         for lbl, vals in ratios.items()
     ]
     notes = je.experiment_notes(settings.journal_dir, exp.key)
+    # The page title: the owner's question if they wrote one, else the hypothesis under test.
+    question = notes.question or exp.hypothesis.strip().rstrip(".")
     suggestion = BY_KEY.get(exp.suggestion_key or "")
     registered = session.scalar(
         select(ProtocolVersion.created_at)
@@ -118,7 +124,7 @@ def public_experiment(
         else f"week {summary.week or 0} / {summary.weeks_total}"
     )
     setup = [
-        j.MethodFact(label="Question", value=_question(exp.hypothesis)),
+        j.MethodFact(label="Question", value=question),
         j.MethodFact(label="Change", value=f"{treatment_label} vs {control_label}"),
         j.MethodFact(
             label="Which posts", value=summary.factors[0].applies_to if summary.factors else "every post"
@@ -139,13 +145,13 @@ def public_experiment(
     ]
     if registered is not None:
         setup.append(
-            j.MethodFact(label="Plan registered", value=f"{registered:%b %d}, before any post was assigned")
+            j.MethodFact(label="Plan registered", value=f"{_day(registered)}, before any post was assigned")
         )
     return j.PublicExperiment(
         key=exp.key,
         slug=exp.key.lower(),
         name=exp.name,
-        question=_question(exp.hypothesis),
+        question=question,
         hypothesis=exp.hypothesis,
         answer=answer,
         design_label=design,
@@ -178,6 +184,7 @@ def _post_row(item: read_models.PostItem, handle: str) -> j.PublicPostRow:
     return j.PublicPostRow(
         text=text if len(text) <= 90 else text[:89] + "…",
         url=f"https://x.com/{handle.lstrip('@')}/status/{item.external_id}",
+        posted_at=item.created_at,
         format=item.format,
         topic=item.topic,
         i2h=None,  # daily batch runs rarely capture a post near 2h; shown only when one exists

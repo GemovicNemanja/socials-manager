@@ -43,7 +43,8 @@ class SeriesPoint(BaseModel):
 
 class Marker(BaseModel):
     at: datetime
-    label: str  # "EXP-012 started"
+    label: str  # "E03 started"
+    slug: str | None = None  # the experiment's page, when the marker is an experiment start
 
 
 class MethodFact(BaseModel):
@@ -59,7 +60,8 @@ class ArmPoint(BaseModel):
 
 
 class ArmSummary(BaseModel):
-    label: str
+    label: str  # human label ("Outcome first")
+    control: bool = False
     n: int
     typical_ratio: float | None  # median ratio of the arm's posts
 
@@ -99,6 +101,7 @@ class PublicPostRow(BaseModel):
 
     text: str  # snippet
     url: str | None  # link to the post on X
+    posted_at: datetime | None = None
     format: str | None
     topic: str | None
     i2h: float | None  # impressions at the capture closest to 2h, when one exists

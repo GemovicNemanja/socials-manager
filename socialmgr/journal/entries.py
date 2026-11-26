@@ -155,18 +155,24 @@ def publish(journal_dir: Path, week: int, now: datetime) -> Entry:
 
 @dataclass
 class ExperimentNotes:
+    question: str | None = None
     answer: str | None = None
     why: str | None = None
     changed: str | None = None
 
 
-NOTE_HEADINGS = {"answer": "answer", "why i tested it": "why", "what i changed": "changed"}
+NOTE_HEADINGS = {
+    "question": "question",
+    "answer": "answer",
+    "why i tested it": "why",
+    "what i changed": "changed",
+}
 
 
 def experiment_notes(journal_dir: Path, key: str) -> ExperimentNotes:
     """Owner-written sections of ``experiments/<key>.md``.
 
-    Headings: ``## Answer``, ``## Why I tested it``, ``## What I changed``.
+    Headings: ``## Question``, ``## Answer``, ``## Why I tested it``, ``## What I changed``.
     """
     path = journal_dir / "experiments" / f"{key.lower()}.md"
     notes = ExperimentNotes()

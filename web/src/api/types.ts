@@ -668,6 +668,11 @@ export interface components {
         ArmSummary: {
             /** Label */
             label: string;
+            /**
+             * Control
+             * @default false
+             */
+            control: boolean;
             /** N */
             n: number;
             /** Typical Ratio */
@@ -1753,6 +1758,8 @@ export interface components {
             at: string;
             /** Label */
             label: string;
+            /** Slug */
+            slug?: string | null;
         };
         /** MethodFact */
         MethodFact: {
@@ -2342,6 +2349,8 @@ export interface components {
             text: string;
             /** Url */
             url: string | null;
+            /** Posted At */
+            posted_at?: string | null;
             /** Format */
             format: string | null;
             /** Topic */

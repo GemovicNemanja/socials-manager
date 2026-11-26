@@ -28,7 +28,11 @@ def web_build(tmp_path: Path) -> Path:
     out = tmp_path / "dist-journal"
     (out / "assets").mkdir(parents=True)
     (out / "journal.html").write_text(
-        "<!doctype html><html><head><title>x</title></head><body><div id=root></div></body></html>"
+        "<!doctype html><html><head><title>Growing in public</title>"
+        '<meta name="description" content="generic" />'
+        '<meta property="og:title" content="generic" />'
+        '<meta property="og:description" content="generic" />'
+        "</head><body><div id=root></div></body></html>"
     )
     (out / "assets" / "app.js").write_text("console.log('journal')")
     return out
@@ -109,7 +113,8 @@ def test_build_writes_the_site_with_published_data_only(
     )
     assert not (out / "journal.html").exists()
     index = (out / "index.html").read_text()
-    assert "og:title" in index and "growing in public" in index
+    assert index.count('property="og:title"') == 1 and index.count('name="description"') == 1
+    assert "growing in public" in index and "generic" not in index
     data = json.loads((out / "data.json").read_text())
     assert data["preview"] is False and [e["slug"] for e in data["entries"]] == ["week-0"]
     assert "Secret draft words" not in (out / "data.json").read_text()
