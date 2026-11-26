@@ -34,7 +34,8 @@ const fixtureServer = (dir: string, port: number, flags = "") => ({
     `${ENV(dir)} uv run socialmgr serve --port ${port}`,
   url: `http://127.0.0.1:${port}/api/health`,
   reuseExistingServer: false,
-  timeout: 120_000,
+  // A fixture load simulates weeks of runs, owner-model reviews included; 120 s was marginal on CI.
+  timeout: 300_000,
 });
 
 /**
