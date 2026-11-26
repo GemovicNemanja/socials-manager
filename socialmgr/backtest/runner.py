@@ -175,6 +175,13 @@ def run_account(
     bt = run_backtest(posts, NB2OwnerModel(chains=4, warmup=300, draws=500), HandSetPrior(), seed=7)
     rows = bt.gate_rows
     r.owner_scored = len(rows)
+    span = (posts[-1].example.created_at - posts[0].example.created_at).total_seconds() / 86400
+    if not rows:
+        r.notes.append(
+            f"its {len(posts)} matured posts span only {span:.1f} days; a post becomes training data 48 hours "
+            "after it's posted, so no post ever had 20 earlier ones to learn from. Needs a longer history "
+            "(more posts for an account this active), not a model change."
+        )
     if rows:
         r.owner_cov50 = float(np.mean([x.candidate.in_50 for x in rows]))
         r.owner_cov80 = float(np.mean([x.candidate.in_80 for x in rows]))

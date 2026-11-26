@@ -34,7 +34,7 @@ from socialmgr.modelling.sbc import SBC_RESULTS
 from tests.owner_sim import T0, Truth, simulate
 
 PREVIOUS = "nb2@prior-0.1+hand_set@0.2"
-OWNER = "nb2@owner-0.1+hand_set@0.2"
+OWNER = "nb2@owner-0.2+hand_set@0.2"
 # Backtests refit at every run, so the simulations use a lighter sampler; gate 6 reads the
 # diagnostics of a production-settings fit on all posts, as a run would.
 LIGHT = NB2OwnerModel(warmup=300, draws=500)

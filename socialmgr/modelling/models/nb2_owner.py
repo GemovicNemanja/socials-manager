@@ -54,7 +54,13 @@ from socialmgr.modelling.models.nb2 import N_DRAWS, REPLY_TYPES, NB2PriorModel
 FloatArray = NDArray[np.float64]
 
 MIN_OWNER_POSTS = 20  # MODEL §2a: at least 20 owner posts before owner-level terms
-OWNER_VERSION = "owner-0.1"
+# 0.2 (2026-11-26): sampling continues, with a proposal re-centred on the draws so far and twice as
+# many draws, until R-hat and bulk ESS meet the release gate's bar (at most two extra rounds). Found
+# on a real account whose replies reach ~3% of an original (rho_th near 0), where one round mixed slowly.
+OWNER_VERSION = "owner-0.2"
+CONVERGED_RHAT = 1.008  # a margin under the gate's 1.01
+CONVERGED_ESS = 500.0  # and over its 400
+MAX_EXTRA_ROUNDS = 2
 GH_NODES = 9
 NEWTON_STEPS = 2
 FIT_TYPES = frozenset({"original", "quote", "reply", "self_reply"})
@@ -294,6 +300,7 @@ class FitDiagnostics:
     n_posts: int
     posterior_mean: dict[str, float]
     posterior_sd: dict[str, float]
+    attempts: int = 1  # sampling rounds: more when the first didn't meet the convergence bar
 
     @property
     def rhat_max(self) -> float:
@@ -438,17 +445,36 @@ class NB2OwnerModel:
         vals, vecs = np.linalg.eigh(0.5 * (hess + hess.T))
         finite = bool(np.all(np.isfinite(vals)))
         cov = (vecs / np.clip(vals, 1e-2, None)) @ vecs.T if finite else np.eye(len(names))
-        rng = np.random.default_rng([seed, 0x0B2])
-        chains = mcmc.sample(
-            logp, center, cov, rng, chains=self.chains, warmup=self.warmup, draws=self.draws, init_spread=2.0
-        )
-        c, s, _ = chains.draws.shape
-        nat_all = _natural(chains.pooled(), data)
-        per_chain = {k: v.reshape(c, s) for k, v in nat_all.items()}
         diag_names = (*DIAGNOSED, "theta_url") if data.with_url else DIAGNOSED
+        draws_n, spread = self.draws, 2.0
+        for attempt in range(MAX_EXTRA_ROUNDS + 1):
+            rng = np.random.default_rng([seed, 0x0B2, attempt])
+            chains = mcmc.sample(
+                logp,
+                center,
+                cov,
+                rng,
+                chains=self.chains,
+                warmup=self.warmup,
+                draws=draws_n,
+                init_spread=spread,
+            )
+            c, s, _ = chains.draws.shape
+            nat_all = _natural(chains.pooled(), data)
+            per_chain = {k: v.reshape(c, s) for k, v in nat_all.items()}
+            rhat = {k: mcmc.rhat(per_chain[k]) for k in diag_names}
+            ess = {k: mcmc.ess_bulk(per_chain[k]) for k in diag_names}
+            if max(rhat.values()) < CONVERGED_RHAT and min(ess.values()) > CONVERGED_ESS:
+                break
+            # Not yet: re-centre the proposal on the draws (the Hessian at the mode understates a
+            # posterior that leans on a boundary) and run longer.
+            pooled = chains.pooled()
+            center = pooled.mean(axis=0)
+            cov = np.cov(pooled, rowvar=False) + 1e-9 * np.eye(pooled.shape[1])
+            draws_n, spread = draws_n * 2, 1.0
         diagnostics = FitDiagnostics(
-            rhat={k: mcmc.rhat(per_chain[k]) for k in diag_names},
-            ess_bulk={k: mcmc.ess_bulk(per_chain[k]) for k in diag_names},
+            rhat=rhat,
+            ess_bulk=ess,
             chains=c,
             draws_per_chain=s,
             accept_rw=chains.accept_rw,
@@ -456,6 +482,7 @@ class NB2OwnerModel:
             n_posts=len(used),
             posterior_mean={k: float(nat_all[k].mean()) for k in diag_names},
             posterior_sd={k: float(nat_all[k].std()) for k in diag_names},
+            attempts=attempt + 1,
         )
         idx = np.linspace(0, c * s - 1, N_DRAWS).round().astype(int)
         keep = ("a_in", "a_oon", "beta", "log_phi", "lambda", "rho_th")

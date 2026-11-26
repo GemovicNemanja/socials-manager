@@ -85,7 +85,7 @@ def test_owner_fit_is_bit_for_bit_and_cached() -> None:
 def test_owner_variant_version_meta_and_diagnostics() -> None:
     fitted = NB2OwnerModel().fit(_history(40, seed=5), PRIOR, seed=1)
     assert isinstance(fitted, FittedOwnerNB2)
-    assert fitted.version == "nb2@owner-0.1+hand_set@0.2"
+    assert fitted.version == "nb2@owner-0.2+hand_set@0.2"
     draws = fitted.predict(SUBJECTS[0])
     assert draws.samples.shape == (1000,)
     assert draws.meta["uses_owner_data"] == "true"
@@ -137,7 +137,7 @@ def test_forecast_from_manifest_recomputes_with_the_owner_champion(tmp_path: Pat
     v1, calibrated, d1 = forecast_from_manifest(active, manifest)
     nb2_owner.clear_cache()
     v2, _, d2 = forecast_from_manifest(active, manifest)
-    assert v1 == v2 == "nb2@owner-0.1+hand_set@0.2" and calibrated
+    assert v1 == v2 == "nb2@owner-0.2+hand_set@0.2" and calibrated
     assert np.array_equal(d1.samples, d2.samples)
     # Under 20 owner posts: today's prior-only forecast, labelled uncalibrated.
     small = _manifest(_history(12, seed=9), seed=42)
@@ -302,3 +302,19 @@ def test_theta_url_is_estimated_when_training_carries_has_url() -> None:
     plain = ForecastSubject(subject_id="post:1", created_at=T, type="original", followers_at_post=300)
     linked = plain.model_copy(update={"has_url": True})
     assert np.median(fitted.predict(linked).samples) < 0.5 * np.median(fitted.predict(plain).samples)
+
+
+def test_a_slow_mixing_fit_samples_more_rounds_until_it_converges() -> None:
+    """A reply-heavy account whose replies get ~3% of an original's reach (rho_th near 0) mixed
+    slowly in one round on real data; the fit now keeps sampling until R-hat and ESS meet the bar."""
+    rng = np.random.default_rng(21)
+    truth = Truth(reply_share=0.65, f_growth=1.0)
+    examples = []
+    for p in simulate(truth, 180, rng):
+        e = p.example
+        y = e.outcome_i48 * (0.03 if e.type in ("reply", "self_reply") else 1.0)
+        examples.append(e.model_copy(update={"outcome_i48": float(round(y))}))
+    for seed in (1, 2, 3):
+        nb2_owner.clear_cache()
+        d = NB2OwnerModel().fit(examples, PRIOR, seed=seed).diagnostics  # type: ignore[attr-defined]
+        assert d.rhat_max < 1.01 and d.ess_bulk_min > 400 and 1 <= d.attempts <= 3
