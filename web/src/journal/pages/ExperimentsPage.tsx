@@ -62,7 +62,7 @@ export function ExperimentsPage({ journal }: { journal: Journal }) {
           idea.
         </Lede>
         <Stats label="Experiments by result">
-          <Stat value={int(running.length)} label="running now" />
+          <Stat value={int(count("running"))} label="running now" />
           <Stat value={int(count("effect_found"))} label="found an effect" />
           <Stat value={int(count("no_effect"))} label="no effect" />
           <Stat value={int(count("stopped"))} label="stopped early" />

@@ -4,8 +4,8 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 // at /journal/ by `socialmgr serve`. With no data.json in the build it reads /api/journal?preview=true,
 // so drafts show, marked. The experiment backend (playwright.config.ts) holds the running E03 x E06
 // factorial plus two weekly entries (`socialmgr fixture --journal-demo`: last week published, this
-// week a draft). Every number checked here is read from the API first; the experiment specs share
-// this backend and may add experiments, so nothing depends on exact experiment counts.
+// week a draft). Every number checked here comes from the snapshot the page itself loaded; the
+// experiment specs share this backend and change it while these run.
 const EXP = "http://127.0.0.1:8796";
 const PLAIN = "http://127.0.0.1:8798";
 const EMPTY = "http://127.0.0.1:8799";
@@ -21,6 +21,14 @@ async function journal(request: APIRequestContext, base: string, preview = true)
   const response = await request.get(`${base}/api/journal?preview=${preview}`);
   expect(response.ok()).toBeTruthy();
   return response.json();
+}
+
+/** Opens a journal page and returns the snapshot the page itself loaded from the preview API, so
+ * assertions never race the experiment specs that change this backend's data. */
+async function open(page: Page, url: string) {
+  const response = page.waitForResponse((r) => r.url().includes("/api/journal"));
+  await page.goto(url);
+  return (await response).json();
 }
 
 /** Fails the test if the page ever opens a dialog (the raw <script> in the demo entry must stay text). */
@@ -45,11 +53,10 @@ test.describe("Public journal on the experiment demo", () => {
     expect((await request.get(`${EXP}/journal/data.json`)).status()).toBe(404);
   });
 
-  test("home: stats, follower chart with experiment starts, recent experiments and notes with the draft marked", async ({ page, request }) => {
-    const j = await journal(request, EXP);
-    expect(j.entries.length).toBe(2);
+  test("home: stats, follower chart with experiment starts, recent experiments and notes with the draft marked", async ({ page }) => {
     noDialogs(page);
-    await page.goto("/journal/#/");
+    const j = await open(page, "/journal/#/");
+    expect(j.entries.length).toBe(2);
     await expect(page.getByRole("heading", { level: 1, name: j.site.headline })).toBeVisible();
     await expect(page).toHaveTitle(`${j.site.handle} · ${j.site.tagline}`);
     await expect(page.getByText(`Week ${j.site.week_number} of growing my account in public`)).toBeVisible();
@@ -100,11 +107,10 @@ test.describe("Public journal on the experiment demo", () => {
     await page.screenshot({ path: "e2e/.results/journal-home.png", fullPage: true });
   });
 
-  test("entry: stats, safe markdown body, posts against forecast, experiments mentioned", async ({ page, request }) => {
-    const j = await journal(request, EXP);
-    const entry = j.entries.find((e: { draft: boolean }) => !e.draft);
+  test("entry: stats, safe markdown body, posts against forecast, experiments mentioned", async ({ page }) => {
     noDialogs(page);
-    await page.goto("/journal/#/");
+    const j = await open(page, "/journal/#/");
+    const entry = j.entries.find((e: { draft: boolean }) => !e.draft);
     await page.getByRole("link", { name: entry.title }).click();
     await expect(page).toHaveURL(new RegExp(`#/notes/${entry.slug}$`));
     await expect(page.getByRole("heading", { level: 1, name: entry.title })).toBeVisible();
@@ -149,10 +155,10 @@ test.describe("Public journal on the experiment demo", () => {
     await expect(page.getByRole("heading", { level: 1, name: j.site.headline })).toBeVisible();
   });
 
-  test("draft entry: marked as not public in the preview", async ({ page, request }) => {
-    const j = await journal(request, EXP);
+  test("draft entry: marked as not public in the preview", async ({ page }) => {
+    const j = await open(page, "/journal/#/");
     const draft = j.entries.find((e: { draft: boolean }) => e.draft);
-    await page.goto(`/journal/#/notes/${draft.slug}`);
+    await page.evaluate((slug) => (window.location.hash = `#/notes/${slug}`), draft.slug);
     await expect(page.getByRole("heading", { level: 1, name: draft.title })).toBeVisible();
     await expect(page.getByRole("article").getByText("Draft — not public")).toBeVisible();
     // The previous note (the published one) is linked below.
@@ -160,23 +166,25 @@ test.describe("Public journal on the experiment demo", () => {
     await expect(page.getByRole("navigation", { name: "More notes" }).getByRole("link", { name: published.title })).toBeVisible();
   });
 
-  test("experiments: results by group, effects at a glance, every row opens its write-up", async ({ page, request }) => {
-    const j = await journal(request, EXP);
-    await page.goto("/journal/#/");
+  test("experiments: results by group, effects at a glance, every row opens its write-up", async ({ page }) => {
+    const j = await open(page, "/journal/#/");
     await page.getByRole("navigation", { name: "Journal sections" }).getByRole("link", { name: /Experiments/ }).click();
     await expect(page).toHaveURL(/#\/experiments$/);
     await expect(page.getByRole("heading", { level: 1, name: new RegExp(`^${j.experiments.length} experiments? so far`) })).toBeVisible();
     await expect(page).toHaveTitle(`Experiments · ${j.site.handle} · ${j.site.tagline}`);
-    const running = j.experiments.filter((x: { result: string }) => x.result === "running" || x.result === "scheduled");
+    const ongoing = j.experiments.filter((x: { result: string }) => x.result === "running" || x.result === "scheduled");
+    const running = ongoing.filter((x: { result: string }) => x.result === "running");
     await expect(page.getByRole("group", { name: "Experiments by result" })).toContainText(`${running.length}running now`);
 
     const all = page.getByRole("region", { name: "All experiments" });
     const group = all.getByRole("group", { name: "Running" });
-    for (const x of running) {
+    // The Running group also holds scheduled experiments (other specs schedule some on this backend).
+    for (const x of ongoing) {
       const row = group.getByRole("link", { name: new RegExp(`^${x.key}`) });
       await expect(row).toContainText(x.progress_label);
-      await expect(row).toContainText(x.effect_ratio != null ? effect(x) : "too early");
-      await expect(row).toContainText("Running");
+      const scheduled = x.result === "scheduled";
+      await expect(row).toContainText(scheduled ? "not started" : x.effect_ratio != null ? effect(x) : "too early");
+      await expect(row).toContainText(scheduled ? "Scheduled" : "Running");
     }
     const forest = page.getByRole("region", { name: /Effects at a glance/ });
     const estimated = j.experiments.filter((x: { effect_ratio: number | null }) => x.effect_ratio != null);
@@ -184,11 +192,10 @@ test.describe("Public journal on the experiment demo", () => {
     await page.screenshot({ path: "e2e/.results/journal-experiments.png", fullPage: true });
   });
 
-  test("experiment: question, answer, stats, why, dot chart per arm, setup, outcome and related", async ({ page, request }) => {
-    const j = await journal(request, EXP);
-    const x = j.experiments.find((e: { key: string }) => e.key === "E03");
+  test("experiment: question, answer, stats, why, dot chart per arm, setup, outcome and related", async ({ page }) => {
     noDialogs(page);
-    await page.goto("/journal/#/experiments");
+    const j = await open(page, "/journal/#/experiments");
+    const x = j.experiments.find((e: { key: string }) => e.key === "E03");
     await page.getByRole("link", { name: /^E03/ }).first().click();
     await expect(page).toHaveURL(/#\/experiments\/e03$/);
     await expect(page.getByRole("heading", { level: 1, name: x.question })).toBeVisible();
@@ -217,9 +224,8 @@ test.describe("Public journal on the experiment demo", () => {
     await page.screenshot({ path: "e2e/.results/journal-experiment.png", fullPage: true });
   });
 
-  test("method: numbered sections with facts and coverage meters", async ({ page, request }) => {
-    const j = await journal(request, EXP);
-    await page.goto("/journal/#/");
+  test("method: numbered sections with facts and coverage meters", async ({ page }) => {
+    const j = await open(page, "/journal/#/");
     await page.getByRole("link", { name: "Method", exact: true }).click();
     await expect(page).toHaveURL(/#\/method$/);
     await expect(page.getByRole("heading", { level: 1, name: j.method.headline })).toBeVisible();
@@ -237,9 +243,8 @@ test.describe("Public journal on the experiment demo", () => {
     await page.screenshot({ path: "e2e/.results/journal-method.png", fullPage: true });
   });
 
-  test("hash routes: unknown pages say so, back and forward work", async ({ page, request }) => {
-    const j = await journal(request, EXP);
-    await page.goto("/journal/#/notes/week-99");
+  test("hash routes: unknown pages say so, back and forward work", async ({ page }) => {
+    const j = await open(page, "/journal/#/notes/week-99");
     await expect(page.getByRole("heading", { level: 1, name: "There's no weekly note here" })).toBeVisible();
     await page.goto("/journal/#/nowhere");
     await expect(page.getByRole("heading", { level: 1, name: "There's no page here" })).toBeVisible();
@@ -270,11 +275,10 @@ test.describe("Public journal on the experiment demo", () => {
 });
 
 test.describe("Public journal empty states", () => {
-  test("plain fixture: followers but no experiments and no notes yet", async ({ page, request }) => {
-    const j = await journal(request, PLAIN);
+  test("plain fixture: followers but no experiments and no notes yet", async ({ page }) => {
+    const j = await open(page, `${PLAIN}/journal/#/`);
     expect(j.experiments).toEqual([]);
     expect(j.entries).toEqual([]);
-    await page.goto(`${PLAIN}/journal/#/`);
     await expect(page.getByRole("heading", { level: 1, name: j.site.headline })).toBeVisible();
     await expect(page.getByRole("region", { name: "My followers since launch" }).getByRole("img")).toBeVisible();
     await expect(page.getByRole("region", { name: "My recent experiments" })).toContainText(
@@ -286,10 +290,9 @@ test.describe("Public journal empty states", () => {
     await expect(page.getByRole("region", { name: /Effects at a glance/ })).toHaveCount(0);
   });
 
-  test("empty database: no followers, no scores, nothing to chart", async ({ page, request }) => {
-    const j = await journal(request, EMPTY);
+  test("empty database: no followers, no scores, nothing to chart", async ({ page }) => {
+    const j = await open(page, `${EMPTY}/journal/#/`);
     expect(j.followers).toEqual([]);
-    await page.goto(`${EMPTY}/journal/#/`);
     await expect(page.getByRole("heading", { level: 1, name: j.site.headline })).toBeVisible();
     await expect(page.getByText("No follower counts yet: the first daily run sets the starting point.")).toBeVisible();
     await expect(page.getByRole("group", { name: "Totals so far" })).toContainText("—followers");
