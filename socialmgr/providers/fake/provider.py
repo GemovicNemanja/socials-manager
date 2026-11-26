@@ -50,6 +50,8 @@ OPENERS = (
     "Why I changed",
 )
 MAX_AGE = timedelta(days=30)
+LOSSES_PER_DAY = 1.4
+BASELINE_IDS = 200
 
 # A simulation hook: given a synthetic post and its true I48, return the post (e.g. with its type
 # changed) and the I48 the world actually delivers. Experiment simulations use it to make outcomes
@@ -84,6 +86,22 @@ class _SyntheticAccount:
     def followers_at(self, t: datetime) -> int:
         days = max((t - self.start).total_seconds() / 86400, 0.0)
         return round(self.growth * days)
+
+    def losses_at(self, t: datetime) -> int:
+        """Cumulative unfollows: about 1.4 a day, so gains run ahead of the net count."""
+        days = max((t - self.start).total_seconds() / 86400, 0.0)
+        return round(LOSSES_PER_DAY * days)
+
+    def follower_ids(self, t: datetime, known: tuple[str, ...]) -> tuple[tuple[str, ...], bool]:
+        """Newest-first follower ids gained since the newest known one (all-time follow order).
+
+        Without known ids it returns the newest ``BASELINE_IDS`` as a baseline, like the real list.
+        """
+        gained = self.followers_at(t) + self.losses_at(t)
+        prefix = f"{self.external_id}-f"
+        indices = [int(k[len(prefix) :]) for k in known if k.startswith(prefix)]
+        lowest = max(indices) + 1 if indices else max(gained - BASELINE_IDS, 0)
+        return tuple(f"{prefix}{i}" for i in range(gained - 1, lowest - 1, -1)), True
 
     def posts_on(self, day: datetime) -> list[tuple[FetchedPost, float]]:
         if day < self.start.replace(hour=0, minute=0, second=0, microsecond=0):
@@ -147,6 +165,9 @@ class _FakeProvider:
             if ref.role not in self.roles:
                 continue
             acct = _SyntheticAccount(self.seed, ref, self.start, self.growth)
+            new_ids: tuple[str, ...] | None = None
+            if Capability.FOLLOWER_LISTS in self.capabilities:
+                new_ids, _ = acct.follower_ids(request.until, ref.known_follower_ids)
             accounts.append(
                 FetchedAccount(
                     account_id=ref.account_id,
@@ -154,6 +175,7 @@ class _FakeProvider:
                     handle=ref.handle,
                     followers=acct.followers_at(request.until),
                     fetched_at=request.until,
+                    new_follower_ids=new_ids,
                 )
             )
             cost += self.cost_per_user_read
@@ -215,7 +237,7 @@ class FakeOwnerProvider(_FakeProvider):
     """Stands in for the official X API with the owner's credentials (owner + non-public metrics)."""
 
     name = "fake_owner"
-    capabilities = frozenset({Capability.OWNER_METRICS, Capability.PUBLIC_METRICS})
+    capabilities = frozenset({Capability.OWNER_METRICS, Capability.PUBLIC_METRICS, Capability.FOLLOWER_LISTS})
     roles = frozenset({"owner"})
     impressions_source = "impression_count"
     owner_metrics = True

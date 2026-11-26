@@ -68,7 +68,7 @@ def fixture(
     end = datetime.fromisoformat(until).astimezone(UTC) if until else default_until()
     with session_scope(session_factory(engine)) as session:
         load = load_experiment_demo if experiment_demo else load_fixture
-        summary = load(session, settings, load_plugins(settings), until=end)
+        summary = load(session, settings, load_plugins(settings), until=end, full=True)
     typer.echo(
         f"Fixture loaded: {summary.runs} runs, {summary.posts} posts, "
         f"{summary.forecasts} forecasts, {summary.scores} scored"

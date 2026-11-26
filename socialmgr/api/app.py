@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -11,11 +12,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from socialmgr import __version__
-from socialmgr.api import schemas
+from socialmgr.api import health_schemas, schemas
 from socialmgr.core.config import Settings
 from socialmgr.db.session import make_engine, session_factory
 from socialmgr.modelling.regimes import Fetcher, github_fetcher
-from socialmgr.services import agent, experiment_views, post_detail, read_models
+from socialmgr.services import agent, experiment_views, follower_views, model_views, post_detail, read_models
 from socialmgr.services import overview as overview_model
 from socialmgr.services.plugins import ActivePlugins, load_plugins
 
@@ -245,6 +246,42 @@ def create_app(
     def next_posts(session: SessionDep, days: Annotated[int, Query(ge=1, le=14)] = 7) -> schemas.NextPostsOut:
         """Registered slots and planned posts for the next days, with arm instructions and frozen ranges."""
         return experiment_views.next_posts(session, settings, days)
+
+    # ------------------------------------------------------------ model health, followers, goals (M3)
+
+    @app.get("/api/model", tags=["model"])
+    def model(session: SessionDep) -> health_schemas.ModelHealthOut:
+        """The Forecasts screen: model card, release gates, calibration, drift monitors, changes."""
+        return model_views.model_health(session, settings)
+
+    @app.post("/api/alarms/{alarm_id}/ack", tags=["model"])
+    def ack_alarm(
+        session: SessionDep, alarm_id: int, body: health_schemas.AckIn | None = None
+    ) -> health_schemas.AckOut:
+        """Acknowledge a detector alarm. Nothing else changes."""
+        return model_views.acknowledge(
+            session, settings, alarm_id, body.note if body else None, "owner", datetime.now(UTC)
+        )
+
+    @app.get("/api/followers", tags=["followers"])
+    def followers(session: SessionDep) -> health_schemas.FollowersOut:
+        """The Account screen's follower panels: tiles, follower forecast band, funnel, goal, past."""
+        return follower_views.followers_view(session, settings)
+
+    @app.get("/api/goals", tags=["followers"])
+    def goals_list(session: SessionDep) -> health_schemas.GoalsOut:
+        """Current goals with their status, and every goal ever set."""
+        return follower_views.goals_overview(session, settings)
+
+    @app.post("/api/goals", tags=["followers"])
+    def set_goal(session: SessionDep, body: health_schemas.GoalIn) -> health_schemas.GoalSetOut:
+        """Set a goal: supersedes the scope's current goal and starts a new period (logged)."""
+        return follower_views.set_goal(session, settings, body, "web", datetime.now(UTC))
+
+    @app.post("/api/goals/preview", tags=["followers"])
+    def preview_goal(session: SessionDep, body: health_schemas.GoalIn) -> health_schemas.GoalPreviewOut:
+        """Where you'd stand today against a goal you haven't saved: P(goal met), median path."""
+        return follower_views.goal_preview(session, settings, active_plugins(), body, datetime.now(UTC))
 
     if web_dist is not None and (web_dist / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="assets")

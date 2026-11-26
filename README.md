@@ -4,18 +4,17 @@ A local analytics and experimentation workbench for one X account. Each team mem
 
 ## Status
 
-**M1 in progress** (the M1 status section in the plan, §9, has the details). What works today:
+**M1, M2 and M3 are built** (the status sections in the plan, §9, have the details). What works today:
 
 - `socialmgr connect` links your X account (OAuth 2.0 with PKCE; tokens stay in the local database).
-- `socialmgr run` collects your posts, metrics and followers, labels new posts, freezes forecasts, scores posts that reached 48 hours, refits the maturity curve, writes a briefing and makes a backup. An interrupted run picks up where it stopped.
-- The Overview and Posts screens in the web app; planned posts (`socialmgr plan`); the MCP server for Claude Code.
+- `socialmgr run` collects your posts, metrics and followers, labels new posts, freezes forecasts, scores posts that reached 48 hours, reviews the model, gives posts under 48 hours a provisional estimate, runs the drift monitors and experiments, freezes a follower forecast and updates goal status, then writes a briefing and makes a backup. An interrupted run picks up where it stopped.
+- Five screens: Overview, Posts, Experiments, Account (followers against their forecast, goal, next posts) and Forecasts (model card, release gates, calibration, drift monitors); planned posts and experiment slots; the MCP server for Claude Code.
 
 Know before you read the numbers:
 
-- **Forecasts are prior-only for now.** They come from the model's priors, not from your own posts, so they are labelled `prior_only_uncalibrated` and every agent answer says confidence "too early". The owner-level model arrives in M3.
+- **Forecasts start prior-only.** They come from the model's priors until 40 of your posts have matured; then a promotion review backtests the owner-level model and switches to it only if every release gate passes (Forecasts shows each gate). Until then forecasts are labelled `prior_only_uncalibrated` and agent answers say confidence "too early".
+- **Drift monitors switch on at 20 matured posts**, and the follower forecast is labelled prior-only for its first 4 weeks of counts.
 - **Reposts are stored but never forecast, scored or shown.** They are someone else's content (X reports 0 impressions for them).
-
-Next: **M2** experiments (planned slots, randomization, readouts), then **M3** model health and goals (owner-level model, calibration, drift monitors, follower forecast, goal status).
 
 ## Setting it up on your Mac
 
@@ -90,7 +89,11 @@ Daily is the target, but skipped days are fine: posts are still captured and sco
 uv run socialmgr serve       # http://127.0.0.1:8765
 ```
 
-Overview (KPIs against their expected ranges, followers, recent posts, spend) and Posts (every post with its frozen range, outcome and labels; click a row for the detail drawer).
+- **Overview:** KPIs against their expected ranges, followers with their forecast band, recent posts, model health, spend.
+- **Posts:** every post with its frozen range, outcome and labels (posts under 48 hours show a provisional estimate); click a row for the detail drawer.
+- **Experiments:** running, suggested and concluded experiments with readouts and approvals.
+- **Account:** follower tiles and funnel, followers against their frozen forecast, how past follower forecasts landed, your goal (**Set goal**: a follower count by a date up to 90 days ahead, or 48h impressions per post), and the next posts.
+- **Forecasts:** the model card, the latest promotion review and its gates, calibration of the last 63 originals, drift monitors and alarms to acknowledge, and changes that can shift performance.
 
 ### Plan a post
 
@@ -114,7 +117,7 @@ Run it on your first day and again about a day later (the second run checks the 
 claude mcp add socialmgr -- uv run --directory /path/to/socials-manager socialmgr mcp
 ```
 
-Tools: `get_briefing`, `start_run`, `get_run_status`, `get_posts`, `get_post`, `get_forecast` (frozen, or a draft for a post you might write), `register_planned_post`, `get_schedule`, `set_label`, `get_account_overview`, `export_data`. Resource: `socialmgr://briefing/latest`. Prompts: `weekly_review` ("summarise last week against the forecasts") and `plan_next_week` (draft forecasts, then freeze the ones you confirm).
+Tools: `get_briefing`, `start_run`, `get_run_status`, `get_posts`, `get_post`, `get_forecast` (frozen, or a draft for a post you might write), `register_planned_post`, `get_schedule`, `set_label`, `get_account_overview`, `export_data`; experiments (`get_experiments`, `get_experiment`, `power_check`, `propose_experiment`, `register_slots`, `schedule_experiment`, `amend_experiment`, `stop_experiment`, `get_readout`, `list_approvals`); followers, goals and the model (`get_follower_forecast`, `set_goal`, `model_status`, `get_calibration`, `get_monitors`, `acknowledge_alarm`). Resources: `socialmgr://briefing/latest`, `socialmgr://model/card`. Prompts: `weekly_review` ("summarise last week against the forecasts") and `plan_next_week` (draft forecasts, then freeze the ones you confirm).
 
 Try: *"Use the socialmgr weekly_review prompt"*, *"How did my posts do this week?"*, *"Plan three posts for next week and freeze their forecasts."* No tool can post, like, reply or follow on X, change a frozen forecast or approve anything.
 

@@ -307,6 +307,39 @@ Also checked: the pipeline recovers a non-prior maturity curve within 5% (`test_
 
 ---
 
+### M3 status (2026-11-26)
+
+On branch `m3-model-health`. Everything below runs in the daily run, in this order after scoring: `review_model` → `nowcast` → `monitors` → `experiments` → `fit_curve` → `followers` → `briefing`.
+
+**Shipped:**
+
+| Area | What |
+|---|---|
+| Owner-level model | `nb2_owner` (seeded multi-chain sampler, R̂/ESS reported); identical to the prior-only model below 20 owner posts. Forecast manifests name their model plugin, so promotion switches new forecasts while old ones still recompute |
+| Promotion reviews | LFO-CV backtest against the trailing median and all MODEL §5 gates; first review at 40 matured posts, then every 21; a failed gate keeps the champion; reviews and gates on Forecasts and in `model_status` |
+| Nowcast | Provisional I48 for posts under 48h, with P(I48 > the frozen median), on Posts and in `get_posts` |
+| Monitors | D1 location, scale and follower-gain CUSUMs, D3 ACI, D2 goal check, diagnostics every 21 posts; armed at 20 matured posts; alarms to acknowledge on Forecasts or with `acknowledge_alarm`; restart after a promotion |
+| Followers | Follower model per run interval, 7/30/90-day forecasts from 4,000 paths frozen every run and scored when their horizon passes (Account shows past forecasts against actuals), posting scenarios, `get_follower_forecast` |
+| Goals | Followers (by a date up to 90 days ahead) and posts (48h impressions); status with hysteresis kept per run; Set goal dialog with a live preview; `set_goal` |
+| Screens | Forecasts (model card, gates, calibration, drift monitor, changes), Account follower panels, Overview follower band and model health |
+| MCP | `get_follower_forecast`, `set_goal`, `model_status`, `get_calibration`, `get_monitors`, `acknowledge_alarm`, resource `socialmgr://model/card` |
+
+**Acceptance criteria:**
+
+| Criterion | How it is checked |
+|---|---|
+| Each detector's false-alarm run length matches its target within ±10% over ≥ 1,000 NB-simulated replicates | `tests/test_monitors.py` (slow): location 300.9 vs 300, scale 297.8 vs 300, follower chart 100.0 / 49.7 / 33.4 vs 100 / 50 / 33.3 at G = 1 / 2 / 3, 36,000 replicates per chart |
+| Goal probabilities match a 100,000-path reference within ±1 point | `tests/test_followers.py` (slow): 3,600 of 3,600 estimates within ±1 point (largest error 0.51) over 9 goals × 100 seeds × prior-only and fitted fits |
+| The follower DGLM recovers known parameters | `tests/test_followers.py` (slow): 90% interval coverage 0.89–0.95 for π, φ_G, φ_L, organic level and loss rate over 1,000 simulated histories with irregular gaps |
+| A failed gate keeps the previous version | `tests/test_m3_release.py`: miscalibrated or short histories are held; `tests/test_m3_runs.py`: the fixture's review is held and the champion stays `nb2`; `tests/test_champion.py`: a promotion switches new forecasts only |
+
+**Not yet verified:**
+- No real promotion: the owner's account has fewer than 40 matured posts. On the fixture the owner-level model is held (it loses to the trailing median, which matches the fixture's generating process).
+- Per-post follows (`/2/tweets/analytics`) still need the X app in a Project, so "Posts that brought followers" is an empty state.
+- Activity covariates and the breakout impulse in the follower model have no inputs yet; owner deviations by type, format and link (60 posts) and D2's peer check are not built.
+
+---
+
 ## 10. Testing
 
 - **Unit:** label rules, orchestrator (order, resume, idempotency), capture ages and maturity offsets, randomization, slot matching, e-LOND bookkeeping, MinHash thresholds, cost tally.
@@ -377,6 +410,12 @@ Also checked: the pipeline recovers a non-prior maturity curve within 5% (`test_
 | Labeller sandbox | Headless Claude Code runs from the system temp folder, outside any project, so a repository's `CLAUDE.md`, hooks or settings can't change the labelling call; a missing structured result falls back to the text result, and a failure reports its reason as a briefing caveat (M1) |
 | e-values for e-LOND | The mSPRT likelihood ratio (MODEL §6.7's other allowed e-value) feeds e-LOND. The calibrator e = 1/(2√p) on a 9,999-draw randomization p caps at 50, below e-LOND's threshold after the first test, so nothing could ever be confirmed. The randomization p stays in every readout as MODEL §6.2's cross-check (M2) |
 | Analysis posterior | Seeded Gibbs sampler for MODEL §6.2 (t errors as a scale mixture, day effects, Lin interaction, carryover), ~0.5 s per readout. τ prior sd fixed at s0 = 0.2 (the value §6.3's rule was calibrated with) and s_fam = 0.1, since one experiment has at most 3 factors. Measured over ≥ 1,000 replicates: false adoption 3.1% (target 2.3), 1.25×/1.5×/2× adoption 16.9/48.1/89.3% (17.7/48.4/91.3), A/A size 5.1%, arm harm under a null ≤ 0.1% (M2) |
+| Owner-level model | `nb2_owner`: the §2a NB2 with a_in, a_oon, log φ, β, λ and ρ_th sampled (seeded multi-chain Metropolis in numpy; q integrated by adaptive Gauss–Hermite); below 20 owner posts it is exactly the prior-only model. Promotion is an explicit switch: each forecast manifest names its model plugin, and the champion is the latest promotion review's choice (M3) |
+| Promotion reviews | First review at 40 matured owner posts (20 to train, 20 to score: the gates need 20 scored posts), then every 21. Rolling refits use a lighter sampler (300 warmup, 500 draws); gate 6 reads a full fit. Gate 4's CUSUM runs over the last 63 backtest posts: over a whole backtest its false-hold chance grows with length (13% at 57 posts, 63% at 300). A failed gate keeps the previous champion; a promotion restarts the monitors (M3) |
+| Detectors | D1 location h = 7.62 (as MODEL); scale chart h = 16.08 upper / 9.59 lower for ARL0 300 two-sided; follower chart h = 5.60 / 4.42 / 3.77 for G = 1 / 2 / 3 days. Measured false-alarm run lengths within ±3% of target over 36,000 NB replicates per chart. ARL1 for a 30% drop at h = 7.62: 43 / 24 / 12 posts at φ = 1.5 / 3 / 8. D2's hit-count test uses a "goal at the typical level" null. While an alarm is open, the same chart firing the same way adds to it instead of paging again (M3) |
+| Follower model | Gaussian log-level filter with Laplace updates (not a conjugate-gamma DGLM, because the gain mean exp(η) + π·X is additive); zero-inflated NB2 replaces Berry–West's DCMM when zeros dominate. Prior-only for the first 4 weeks of counts. Goal probabilities from 4,000 paths are within ±1 point of a 100,000-path reference (3,600/3,600) thanks to exact final counts, Gauss–Hermite over π and control variates. Follower goals reach at most 90 days, the forecast's longest horizon (M3) |
+| Posts goal | θ_S = the champion's typical original now (a point value) plus the scope effect b_S, whose posterior from the last 21 originals' residuals against their frozen forecasts carries the uncertainty (M3) |
+| Nowcast | Precision weighting until 50 owner trajectories; then the regression only while it beats the frozen forecast in every age band (the nowcast gate). Shown as provisional with P(I48 > the frozen median) (M3) |
 | Arm-harm confidence sequence | Design-based (valid by the randomization blocks alone), computed only over blocks whose posts have all matured. It catches a 0.5× arm in 20% of 4-week experiments and 57% of 8-week ones: weak by construction, because the bar is 0.8× and there are about 28 blocks (M2) |
 
 ---

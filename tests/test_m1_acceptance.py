@@ -120,7 +120,13 @@ def test_as_of_forecasts_recompute_and_ignore_perturbed_later_captures(tmp_path:
             post = session.get(Post, int(fc.subject.split(":")[1]))
             assert post is not None
             rebuilt = pipeline.build_manifest(session, 1, post)
-            stored = {k: v for k, v in frozen[fc.id].items() if k not in ("model_version", "calibrated")}
+            # None until a promotion review exists; the configured champion is filled in at freezing.
+            assert rebuilt.pop("model_plugin") in (None, frozen[fc.id]["model_plugin"])
+            stored = {
+                k: v
+                for k, v in frozen[fc.id].items()
+                if k not in ("model_plugin", "model_version", "calibrated")
+            }
             assert rebuilt == stored, f"forecast {fc.id} manifest changed after later captures"
             assert sha256_json(frozen[fc.id]) == fc.manifest_hash
             version, _calibrated, predicted = pipeline.forecast_from_manifest(plugins, fc.input_manifest)

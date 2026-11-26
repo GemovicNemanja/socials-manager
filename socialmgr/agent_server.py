@@ -18,6 +18,7 @@ from mcp.types import ToolAnnotations
 from sqlalchemy.orm import Session
 
 from socialmgr import __version__
+from socialmgr.api import health_schemas
 from socialmgr.core.config import Settings
 from socialmgr.core.types import PostType
 from socialmgr.db import migrate
@@ -25,7 +26,7 @@ from socialmgr.db.session import make_engine, session_factory
 from socialmgr.experiments.engine import AmendRequest
 from socialmgr.experiments.specs import DayPlan, ExperimentSpec
 from socialmgr.modelling.regimes import Fetcher, github_fetcher
-from socialmgr.services import agent, briefing, planned, read_models
+from socialmgr.services import agent, agent_m3, briefing, planned, read_models
 from socialmgr.services import experiments as exp_services
 from socialmgr.services.plugins import ActivePlugins, load_plugins
 
@@ -260,6 +261,63 @@ def create_server(
             return exp_services.list_approvals(s, settings, status)
 
     # ------------------------------------------------------------ resources and prompts
+
+    # ------------------------------------------------------------ account, goals and model (M3)
+
+    @tool(READ)
+    def get_follower_forecast() -> agent_m3.FollowerForecastResponse:
+        """Follower forecast (7/30/90-day quantiles, prior-only or calibrated), how earlier frozen
+        follower forecasts landed against the actual count, goal status and posting scenarios."""
+        with session() as s:
+            return agent_m3.get_follower_forecast(s, settings)
+
+    @tool(WRITE_LOCAL)
+    def set_goal(
+        scope: Literal["posts", "followers"],
+        target: float,
+        target_at: datetime | None = None,
+        note: str | None = None,
+    ) -> agent_m3.GoalResponse:
+        """Set a goal: `followers` (reach `target` followers by `target_at`) or `posts` (48h impressions
+        per post). Supersedes the scope's current goal and starts a new period; every change is logged.
+        Goal status (working / near threshold / not working) is computed at the next run."""
+        with session() as s:
+            return agent_m3.set_goal(
+                s, settings, health_schemas.GoalIn(scope=scope, target=target, target_at=target_at, note=note)
+            )
+
+    @tool(READ)
+    def model_status() -> agent_m3.ModelStatusResponse:
+        """The champion model, its stage (priors only or owner-level), the model card and the latest
+        promotion reviews with each release gate (MODEL §5). A failed gate keeps the previous model."""
+        with session() as s:
+            return agent_m3.model_status(s, settings)
+
+    @tool(READ)
+    def get_calibration() -> agent_m3.CalibrationResponse:
+        """How well frozen forecasts were calibrated: 50/80/95% coverage of the last 63 matured originals
+        against binomial bands, PIT histogram, Berkowitz and PIT chi-square tests, CRPS skill."""
+        with session() as s:
+            return agent_m3.get_calibration(s, settings)
+
+    @tool(READ)
+    def get_monitors() -> agent_m3.MonitorsResponse:
+        """Drift monitors (D1 location, scale and follower-gain CUSUMs, D2 goal check, D3 ACI), open
+        alarms and recent changes that can shift performance."""
+        with session() as s:
+            return agent_m3.get_monitors(s, settings)
+
+    @tool(WRITE_LOCAL)
+    def acknowledge_alarm(alarm_id: int, note: str | None = None) -> agent_m3.AckResponse:
+        """Mark a detector alarm as seen, with an optional note. Changes nothing else."""
+        with session() as s:
+            return agent_m3.acknowledge_alarm(s, settings, alarm_id, note)
+
+    @server.resource("socialmgr://model/card", mime_type="text/plain")
+    def model_card() -> str:
+        """The champion's model card and its last release gates."""
+        with session() as s:
+            return agent_m3.model_card_text(s, settings)
 
     @server.resource("socialmgr://briefing/latest", mime_type="text/plain")
     def latest_briefing() -> str:

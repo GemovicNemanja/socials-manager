@@ -911,10 +911,359 @@
           }
         }
       }
+    },
+    "/api/model": {
+      "get": {
+        "tags": [
+          "model"
+        ],
+        "summary": "Model",
+        "description": "The Forecasts screen: model card, release gates, calibration, drift monitors, changes.",
+        "operationId": "model_api_model_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelHealthOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alarms/{alarm_id}/ack": {
+      "post": {
+        "tags": [
+          "model"
+        ],
+        "summary": "Ack Alarm",
+        "description": "Acknowledge a detector alarm. Nothing else changes.",
+        "operationId": "ack_alarm_api_alarms__alarm_id__ack_post",
+        "parameters": [
+          {
+            "name": "alarm_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Alarm Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AckIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AckOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/followers": {
+      "get": {
+        "tags": [
+          "followers"
+        ],
+        "summary": "Followers",
+        "description": "The Account screen's follower panels: tiles, follower forecast band, funnel, goal, past.",
+        "operationId": "followers_api_followers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowersOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals": {
+      "get": {
+        "tags": [
+          "followers"
+        ],
+        "summary": "Goals List",
+        "description": "Current goals with their status, and every goal ever set.",
+        "operationId": "goals_list_api_goals_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalsOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "followers"
+        ],
+        "summary": "Set Goal",
+        "description": "Set a goal: supersedes the scope's current goal and starts a new period (logged).",
+        "operationId": "set_goal_api_goals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalSetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals/preview": {
+      "post": {
+        "tags": [
+          "followers"
+        ],
+        "summary": "Preview Goal",
+        "description": "Where you'd stand today against a goal you haven't saved: P(goal met), median path.",
+        "operationId": "preview_goal_api_goals_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalPreviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AckIn": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "AckIn"
+      },
+      "AckOut": {
+        "properties": {
+          "acknowledged": {
+            "type": "boolean",
+            "title": "Acknowledged"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "alarm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlarmOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "acknowledged",
+          "summary",
+          "alarm"
+        ],
+        "title": "AckOut"
+      },
+      "AlarmOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "chart": {
+            "type": "string",
+            "title": "Chart"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "raised_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Raised At"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "stat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stat"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "attribution": {
+            "type": "string",
+            "title": "Attribution"
+          },
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "chart",
+          "label",
+          "raised_at",
+          "direction",
+          "stat",
+          "threshold",
+          "attribution",
+          "acknowledged_at",
+          "note"
+        ],
+        "title": "AlarmOut"
+      },
       "ApprovalCardOut": {
         "properties": {
           "id": {
@@ -1394,6 +1743,196 @@
         "title": "Calibration",
         "description": "Share of scored posts whose outcome fell inside the frozen 50% and 80% ranges."
       },
+      "CalibrationTile": {
+        "properties": {
+          "berkowitz_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Berkowitz P"
+          },
+          "pit_chi2_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pit Chi2 P"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          }
+        },
+        "type": "object",
+        "required": [
+          "berkowitz_p",
+          "pit_chi2_p",
+          "passed",
+          "n"
+        ],
+        "title": "CalibrationTile"
+      },
+      "ChangeRowOut": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "Model",
+              "X ranker repo",
+              "Account",
+              "Goal",
+              "Monitor"
+            ],
+            "title": "Source"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "source",
+          "text",
+          "action"
+        ],
+        "title": "ChangeRowOut",
+        "description": "A dated change that can shift performance: ranker changes, model releases, goals."
+      },
+      "ChartPoint": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "value"
+        ],
+        "title": "ChartPoint"
+      },
+      "CountTile": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Day"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpectedVsActual"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "per_day",
+          "expected",
+          "note"
+        ],
+        "title": "CountTile"
+      },
+      "CoverageRow": {
+        "properties": {
+          "level": {
+            "type": "number",
+            "title": "Level"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "value",
+          "n"
+        ],
+        "title": "CoverageRow"
+      },
       "CurvePoint": {
         "properties": {
           "age_h": {
@@ -1635,6 +2174,72 @@
         ],
         "title": "DeviationRowOut"
       },
+      "DriftTile": {
+        "properties": {
+          "armed": {
+            "type": "boolean",
+            "title": "Armed"
+          },
+          "stat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stat"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "off",
+              "quiet",
+              "alarm"
+            ],
+            "title": "State"
+          },
+          "last_alarm_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Alarm At"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "armed",
+          "stat",
+          "threshold",
+          "state",
+          "last_alarm_at",
+          "reason"
+        ],
+        "title": "DriftTile",
+        "description": "D1 location CUSUM on 48h impressions."
+      },
       "ELondEntryOut": {
         "properties": {
           "factor": {
@@ -1694,6 +2299,29 @@
         ],
         "title": "ELondStatusOut"
       },
+      "Elasticity": {
+        "properties": {
+          "q50": {
+            "type": "number",
+            "title": "Q50"
+          },
+          "q10": {
+            "type": "number",
+            "title": "Q10"
+          },
+          "q90": {
+            "type": "number",
+            "title": "Q90"
+          }
+        },
+        "type": "object",
+        "required": [
+          "q50",
+          "q10",
+          "q90"
+        ],
+        "title": "Elasticity"
+      },
       "ExpectedRange": {
         "properties": {
           "q10": {
@@ -1742,6 +2370,45 @@
         ],
         "title": "ExpectedRange",
         "description": "The 10/50/90% quantiles of a KPI's predictive distribution and where the actual landed."
+      },
+      "ExpectedVsActual": {
+        "properties": {
+          "expected": {
+            "$ref": "#/components/schemas/FollowerRange"
+          },
+          "actual": {
+            "type": "number",
+            "title": "Actual"
+          },
+          "percentile": {
+            "type": "number",
+            "title": "Percentile"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "above",
+              "as_expected",
+              "below"
+            ],
+            "title": "Outcome"
+          },
+          "made_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Made At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected",
+          "actual",
+          "percentile",
+          "outcome",
+          "made_at"
+        ],
+        "title": "ExpectedVsActual",
+        "description": "A past expectation and how the actual landed against it (MODEL \u00a74.1 thresholds)."
       },
       "ExperimentActionOut": {
         "properties": {
@@ -2617,6 +3284,89 @@
         ],
         "title": "FactorReadoutOut"
       },
+      "FollowerBandPoint": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "q10": {
+            "type": "number",
+            "title": "Q10"
+          },
+          "q50": {
+            "type": "number",
+            "title": "Q50"
+          },
+          "q90": {
+            "type": "number",
+            "title": "Q90"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "q10",
+          "q50",
+          "q90"
+        ],
+        "title": "FollowerBandPoint"
+      },
+      "FollowerForecastOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "made_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Made At"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "prior_only",
+              "calibrated"
+            ],
+            "title": "Kind"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "start_followers": {
+            "type": "integer",
+            "title": "Start Followers"
+          },
+          "band": {
+            "items": {
+              "$ref": "#/components/schemas/FollowerBandPoint"
+            },
+            "type": "array",
+            "title": "Band"
+          },
+          "horizons": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FollowerRange"
+            },
+            "type": "object",
+            "title": "Horizons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "made_at",
+          "kind",
+          "model_version",
+          "start_followers",
+          "band",
+          "horizons"
+        ],
+        "title": "FollowerForecastOut"
+      },
       "FollowerPoint": {
         "properties": {
           "at": {
@@ -2635,6 +3385,128 @@
           "followers"
         ],
         "title": "FollowerPoint"
+      },
+      "FollowerRange": {
+        "properties": {
+          "q10": {
+            "type": "number",
+            "title": "Q10"
+          },
+          "q50": {
+            "type": "number",
+            "title": "Q50"
+          },
+          "q90": {
+            "type": "number",
+            "title": "Q90"
+          }
+        },
+        "type": "object",
+        "required": [
+          "q10",
+          "q50",
+          "q90"
+        ],
+        "title": "FollowerRange"
+      },
+      "FollowerScoreOut": {
+        "properties": {
+          "forecast_id": {
+            "type": "integer",
+            "title": "Forecast Id"
+          },
+          "made_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Made At"
+          },
+          "horizon_days": {
+            "type": "integer",
+            "title": "Horizon Days"
+          },
+          "target_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Target At"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/FollowerRange"
+          },
+          "actual": {
+            "type": "integer",
+            "title": "Actual"
+          },
+          "percentile": {
+            "type": "number",
+            "title": "Percentile"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "above",
+              "as_expected",
+              "below"
+            ],
+            "title": "Outcome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "forecast_id",
+          "made_at",
+          "horizon_days",
+          "target_at",
+          "expected",
+          "actual",
+          "percentile",
+          "outcome"
+        ],
+        "title": "FollowerScoreOut",
+        "description": "A frozen follower forecast whose horizon has passed, against the actual count."
+      },
+      "FollowerTiles": {
+        "properties": {
+          "followers": {
+            "$ref": "#/components/schemas/CountTile"
+          },
+          "net_7d": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net 7D"
+          },
+          "new_follows_7d": {
+            "$ref": "#/components/schemas/CountTile"
+          },
+          "unfollows_7d": {
+            "$ref": "#/components/schemas/CountTile"
+          },
+          "profile_visits_7d": {
+            "$ref": "#/components/schemas/CountTile"
+          },
+          "visit_to_follow_7d": {
+            "$ref": "#/components/schemas/CountTile"
+          },
+          "replies_7d": {
+            "$ref": "#/components/schemas/CountTile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "followers",
+          "net_7d",
+          "new_follows_7d",
+          "unfollows_7d",
+          "profile_visits_7d",
+          "visit_to_follow_7d",
+          "replies_7d"
+        ],
+        "title": "FollowerTiles"
       },
       "FollowersKpi": {
         "properties": {
@@ -2679,6 +3551,137 @@
           "change_28d"
         ],
         "title": "FollowersKpi"
+      },
+      "FollowersOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "tiles": {
+            "$ref": "#/components/schemas/FollowerTiles"
+          },
+          "actual": {
+            "items": {
+              "$ref": "#/components/schemas/ChartPoint"
+            },
+            "type": "array",
+            "title": "Actual"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FollowerForecastOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "annotations": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeRowOut"
+            },
+            "type": "array",
+            "title": "Annotations"
+          },
+          "funnel": {
+            "items": {
+              "$ref": "#/components/schemas/FunnelStep"
+            },
+            "type": "array",
+            "title": "Funnel"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalStatusOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "past": {
+            "items": {
+              "$ref": "#/components/schemas/FollowerScoreOut"
+            },
+            "type": "array",
+            "title": "Past"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioOut"
+            },
+            "type": "array",
+            "title": "Scenarios"
+          },
+          "model_kind": {
+            "type": "string",
+            "enum": [
+              "prior_only",
+              "calibrated",
+              "none"
+            ],
+            "title": "Model Kind"
+          },
+          "intervals_n": {
+            "type": "integer",
+            "title": "Intervals N"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "model_version",
+          "data_sufficiency",
+          "caveats",
+          "summary",
+          "tiles",
+          "actual",
+          "forecast",
+          "annotations",
+          "funnel",
+          "goal",
+          "past",
+          "scenarios",
+          "model_kind",
+          "intervals_n"
+        ],
+        "title": "FollowersOut"
       },
       "ForecastDetail": {
         "properties": {
@@ -2963,6 +3966,537 @@
         ],
         "title": "ForecastSummary"
       },
+      "FunnelStep": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "impressions",
+              "profile_visits",
+              "new_follows",
+              "unfollows",
+              "net"
+            ],
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "value",
+          "note"
+        ],
+        "title": "FunnelStep"
+      },
+      "GateOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "threshold": {
+            "type": "string",
+            "title": "Threshold"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "passed",
+          "value",
+          "threshold",
+          "detail"
+        ],
+        "title": "GateOut",
+        "description": "One release gate (MODEL \u00a75). ``passed`` is None when it couldn't be evaluated."
+      },
+      "GoalIn": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "posts",
+              "followers"
+            ],
+            "title": "Scope"
+          },
+          "target": {
+            "type": "number",
+            "title": "Target"
+          },
+          "target_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "target"
+        ],
+        "title": "GoalIn"
+      },
+      "GoalOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "posts",
+              "followers"
+            ],
+            "title": "Scope"
+          },
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "target": {
+            "type": "number",
+            "title": "Target"
+          },
+          "target_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "metric",
+          "target",
+          "target_at",
+          "created_at",
+          "created_by",
+          "superseded_at"
+        ],
+        "title": "GoalOut"
+      },
+      "GoalPreviewOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "working",
+              "near",
+              "not_working",
+              "no_goal"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "p_goal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Goal"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "q10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q10"
+          },
+          "q90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q90"
+          },
+          "paths": {
+            "type": "integer",
+            "title": "Paths"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "reason",
+          "p_goal",
+          "median",
+          "q10",
+          "q90",
+          "paths",
+          "summary"
+        ],
+        "title": "GoalPreviewOut",
+        "description": "Where the member would stand today against a goal they haven't saved yet."
+      },
+      "GoalSetOut": {
+        "properties": {
+          "saved": {
+            "type": "boolean",
+            "title": "Saved"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "saved",
+          "summary",
+          "goal"
+        ],
+        "title": "GoalSetOut"
+      },
+      "GoalStatusOut": {
+        "properties": {
+          "goal": {
+            "$ref": "#/components/schemas/GoalOut"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "working",
+              "near",
+              "not_working",
+              "no_goal"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "p_goal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Goal"
+          },
+          "p_hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Hi"
+          },
+          "p_lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Lo"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "previous_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Status"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "q10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q10"
+          },
+          "q90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q90"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goal",
+          "status",
+          "reason",
+          "p_goal",
+          "p_hi",
+          "p_lo",
+          "since",
+          "previous_status",
+          "median",
+          "q10",
+          "q90",
+          "summary"
+        ],
+        "title": "GoalStatusOut"
+      },
+      "GoalsOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "current": {
+            "items": {
+              "$ref": "#/components/schemas/GoalStatusOut"
+            },
+            "type": "array",
+            "title": "Current"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/GoalOut"
+            },
+            "type": "array",
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "model_version",
+          "data_sufficiency",
+          "caveats",
+          "summary",
+          "current",
+          "history"
+        ],
+        "title": "GoalsOut"
+      },
       "GuardrailHit": {
         "properties": {
           "rule": {
@@ -3033,6 +4567,73 @@
         ],
         "title": "HealthCheckOut"
       },
+      "HitRateTile": {
+        "properties": {
+          "level": {
+            "type": "number",
+            "title": "Level"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "band_lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Lo"
+          },
+          "band_hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Hi"
+          },
+          "in_band": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Band"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "value",
+          "n",
+          "band_lo",
+          "band_hi",
+          "in_band"
+        ],
+        "title": "HitRateTile",
+        "description": "Share of matured posts whose outcome fell inside the frozen central interval."
+      },
       "I48": {
         "properties": {
           "value": {
@@ -3053,6 +4654,28 @@
           "provisional": {
             "type": "boolean",
             "title": "Provisional"
+          },
+          "p_above_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Above Median"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
           }
         },
         "type": "object",
@@ -3110,6 +4733,350 @@
           "expected"
         ],
         "title": "Kpi"
+      },
+      "ModelCardOut": {
+        "properties": {
+          "champion": {
+            "type": "string",
+            "title": "Champion"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "prior_only",
+              "owner"
+            ],
+            "title": "Stage"
+          },
+          "outcome_model": {
+            "type": "string",
+            "title": "Outcome Model"
+          },
+          "prior": {
+            "type": "string",
+            "title": "Prior"
+          },
+          "follower_elasticity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Elasticity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "post_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Post Features"
+          },
+          "maturity_curve": {
+            "type": "string",
+            "title": "Maturity Curve"
+          },
+          "challenger": {
+            "type": "string",
+            "title": "Challenger"
+          },
+          "promotion_rule": {
+            "type": "string",
+            "title": "Promotion Rule"
+          },
+          "last_promotion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Promotion"
+          },
+          "refit": {
+            "type": "string",
+            "title": "Refit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "champion",
+          "version",
+          "stage",
+          "outcome_model",
+          "prior",
+          "follower_elasticity",
+          "post_features",
+          "maturity_curve",
+          "challenger",
+          "promotion_rule",
+          "last_promotion",
+          "refit"
+        ],
+        "title": "ModelCardOut"
+      },
+      "ModelHealthOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "data_sufficiency": {
+            "$ref": "#/components/schemas/DataSufficiency"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "prior_only",
+              "owner"
+            ],
+            "title": "Stage"
+          },
+          "owner_n": {
+            "type": "integer",
+            "title": "Owner N"
+          },
+          "owner_terms_at": {
+            "type": "integer",
+            "title": "Owner Terms At"
+          },
+          "first_review_at": {
+            "type": "integer",
+            "title": "First Review At"
+          },
+          "hit_80": {
+            "$ref": "#/components/schemas/HitRateTile"
+          },
+          "hit_50": {
+            "$ref": "#/components/schemas/HitRateTile"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillTile"
+          },
+          "calibration": {
+            "$ref": "#/components/schemas/CalibrationTile"
+          },
+          "drift": {
+            "$ref": "#/components/schemas/DriftTile"
+          },
+          "pit": {
+            "$ref": "#/components/schemas/PitHistogram"
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRow"
+            },
+            "type": "array",
+            "title": "Coverage"
+          },
+          "width_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width Ratio"
+          },
+          "next_check_in_posts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Check In Posts"
+          },
+          "card": {
+            "$ref": "#/components/schemas/ModelCardOut"
+          },
+          "last_review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewOut"
+            },
+            "type": "array",
+            "title": "Reviews"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeRowOut"
+            },
+            "type": "array",
+            "title": "Changes"
+          },
+          "monitors": {
+            "items": {
+              "$ref": "#/components/schemas/MonitorOut"
+            },
+            "type": "array",
+            "title": "Monitors"
+          },
+          "alarms": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmOut"
+            },
+            "type": "array",
+            "title": "Alarms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "model_version",
+          "data_sufficiency",
+          "caveats",
+          "summary",
+          "stage",
+          "owner_n",
+          "owner_terms_at",
+          "first_review_at",
+          "hit_80",
+          "hit_50",
+          "skill",
+          "calibration",
+          "drift",
+          "pit",
+          "coverage",
+          "width_ratio",
+          "next_check_in_posts",
+          "card",
+          "last_review",
+          "reviews",
+          "changes",
+          "monitors",
+          "alarms"
+        ],
+        "title": "ModelHealthOut"
+      },
+      "MonitorOut": {
+        "properties": {
+          "chart": {
+            "type": "string",
+            "title": "Chart"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "armed": {
+            "type": "boolean",
+            "title": "Armed"
+          },
+          "stat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stat"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "off",
+              "quiet",
+              "alarm",
+              "proposal"
+            ],
+            "title": "State"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/ChartPoint"
+            },
+            "type": "array",
+            "title": "Series"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chart",
+          "label",
+          "armed",
+          "stat",
+          "threshold",
+          "state",
+          "detail",
+          "series"
+        ],
+        "title": "MonitorOut"
       },
       "NearDuplicate": {
         "properties": {
@@ -3537,6 +5504,52 @@
           "reason"
         ],
         "title": "PendingAreaInfo"
+      },
+      "PitHistogram": {
+        "properties": {
+          "counts": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Counts"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "band_lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Lo"
+          },
+          "band_hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band Hi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counts",
+          "n",
+          "band_lo",
+          "band_hi"
+        ],
+        "title": "PitHistogram",
+        "description": "PIT of 48h impressions in 10 bins, last ``n`` originals and quotes. Flat means calibrated."
       },
       "PlanIn": {
         "properties": {
@@ -4576,6 +6589,69 @@
         ],
         "title": "RegisterSlotsOut"
       },
+      "ReviewOut": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "promoted",
+              "held",
+              "not_eligible",
+              "kept"
+            ],
+            "title": "Decision"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "candidate": {
+            "type": "string",
+            "title": "Candidate"
+          },
+          "champion_before": {
+            "type": "string",
+            "title": "Champion Before"
+          },
+          "champion_after": {
+            "type": "string",
+            "title": "Champion After"
+          },
+          "owner_n": {
+            "type": "integer",
+            "title": "Owner N"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/GateOut"
+            },
+            "type": "array",
+            "title": "Gates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "run_id",
+          "decision",
+          "reason",
+          "candidate",
+          "champion_before",
+          "champion_after",
+          "owner_n",
+          "gates"
+        ],
+        "title": "ReviewOut"
+      },
       "RunFailure": {
         "properties": {
           "run_id": {
@@ -4835,6 +6911,41 @@
           "failure"
         ],
         "title": "RunStatusOut"
+      },
+      "ScenarioOut": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "posts_per_day": {
+            "type": "number",
+            "title": "Posts Per Day"
+          },
+          "q50_30d": {
+            "type": "number",
+            "title": "Q50 30D"
+          },
+          "p_goal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Goal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "posts_per_day",
+          "q50_30d",
+          "p_goal"
+        ],
+        "title": "ScenarioOut"
       },
       "ScheduleResponse": {
         "properties": {
@@ -5162,6 +7273,68 @@
           "cap_usd"
         ],
         "title": "ShellSpend"
+      },
+      "SkillTile": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "ci90_lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci90 Lo"
+          },
+          "ci90_hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci90 Hi"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "ci90_lo",
+          "ci90_hi",
+          "passed",
+          "n"
+        ],
+        "title": "SkillTile",
+        "description": "Log-CRPS skill against the trailing-median baseline, week-block bootstrap 90% interval."
       },
       "SlotOut": {
         "properties": {
