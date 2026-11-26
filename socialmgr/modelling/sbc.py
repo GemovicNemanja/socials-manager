@@ -46,6 +46,14 @@ class SBCRecord:
 # Recorded by ``tests/test_m3_owner_model.py::test_sbc_owner_model`` (slow), which fails if the
 # entry for the current version is missing or disagrees with a fresh run.
 SBC_RESULTS: dict[str, SBCRecord] = {
+    "nb2@owner-0.2+hand_set@0.2": SBCRecord(
+        version="nb2@owner-0.2+hand_set@0.2",
+        passed=True,
+        n_reps=300,
+        n_posts=30,
+        min_p=0.1132,
+        recorded_on="2026-11-26",
+    ),
     "nb2@owner-0.1+hand_set@0.2": SBCRecord(
         version="nb2@owner-0.1+hand_set@0.2",
         passed=True,

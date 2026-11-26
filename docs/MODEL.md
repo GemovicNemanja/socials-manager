@@ -556,7 +556,7 @@ REVIEW's "more than 70% of posts not working" rule is dropped: it fires with pro
 2. 50% and 80% coverage fall inside the binomial bands.
 3. Berkowitz and PIT χ² p-values are above 0.01.
 4. No CUSUM alarm in the backtest.
-5. 80% interval width is at most 1.1× the baseline's.
+5. 80% interval width is at most 1.1× the baseline's, after the baseline's ranges are recalibrated to cover 80% on the same backtest. *Amended 2026-11-26 (owner): on real accounts the trailing median covered only 40–52% inside its 80% range, so the raw comparison held back a calibrated model for being wider than a wrong baseline.*
 6. R̂ < 1.01, ESS > 400, and simulation-based calibration (SBC) passes.
 7. Brier score is no worse than the baseline.
 

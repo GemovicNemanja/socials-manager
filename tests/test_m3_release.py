@@ -34,7 +34,7 @@ from socialmgr.modelling.sbc import SBC_RESULTS
 from tests.owner_sim import T0, Truth, simulate
 
 PREVIOUS = "nb2@prior-0.1+hand_set@0.2"
-OWNER = "nb2@owner-0.1+hand_set@0.2"
+OWNER = "nb2@owner-0.2+hand_set@0.2"
 # Backtests refit at every run, so the simulations use a lighter sampler; gate 6 reads the
 # diagnostics of a production-settings fit on all posts, as a run would.
 LIGHT = NB2OwnerModel(warmup=300, draws=500)
@@ -148,7 +148,7 @@ def test_all_gates_pass_promotes_the_candidate() -> None:
     ("gate", "mutate"),
     [
         ("crps_skill", lambda r: replace(r, candidate=replace(r.candidate, crps_log=0.6))),
-        ("width_80", lambda r: replace(r, candidate=replace(r.candidate, width_80=120.0))),
+        ("width_80", lambda r: replace(r, candidate=replace(r.candidate, width_80=160.0))),
         ("brier", lambda r: replace(r, candidate=replace(r.candidate, p_goal=0.5 if r.hit_goal else 0.9))),
         ("coverage", lambda r: replace(r, candidate=replace(r.candidate, in_80=True))),
         (
@@ -312,3 +312,28 @@ def test_gate_operating_characteristics_over_replicates() -> None:
     # A calibrated model still trips the CUSUM (ARL0 300) or a p > 0.01 test now and then.
     assert good >= 0.6, good_fail
     assert bad <= 0.05, bad_fail
+
+
+def test_width_is_judged_against_a_recalibrated_baseline() -> None:
+    """Amendment to MODEL §5 gate 5 (2026-11-26): an overconfident baseline (outcomes outside its
+    80% range half the time, as on real accounts) is widened until it covers 80% before comparing,
+    so an honest model isn't held for being wider than a wrong one."""
+    from socialmgr.modelling.release import GateThresholds, calibrated_baseline_width, gate_width
+
+    rng = np.random.default_rng(3)
+    rows = []
+    for r in _rows(120, seed=3):
+        # Baseline PITs piled near 0 and 1: about half the outcomes fall outside its 80% range.
+        u = float(rng.uniform())
+        pit = 0.03 * u if u < 0.25 else (1 - 0.03 * (1 - u) if u > 0.75 else 0.1 + 0.8 * u)
+        rows.append(
+            replace(
+                r, candidate=replace(r.candidate, width_80=170.0), baseline=replace(r.baseline, pit_rand=pit)
+            )
+        )
+    calibrated, level = calibrated_baseline_width(rows)
+    assert level > 0.95 and calibrated > 170.0
+    assert gate_width(rows, GateThresholds()).passed  # raw ratio 1.7 would have failed
+    calibrated_rows = _rows(120, seed=4)
+    width, lvl = calibrated_baseline_width(calibrated_rows)
+    assert 0.75 < lvl < 0.85 and 90 < width < 112  # a calibrated baseline is left about as it was
