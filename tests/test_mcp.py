@@ -41,6 +41,12 @@ TOOLS = {
     "stop_experiment",
     "get_readout",
     "list_approvals",
+    "get_follower_forecast",
+    "set_goal",
+    "model_status",
+    "get_calibration",
+    "get_monitors",
+    "acknowledge_alarm",
 }
 ENVELOPE = {"summary", "confidence", "as_of", "model_version", "regime_id", "data_sufficiency", "caveats"}
 
@@ -75,7 +81,9 @@ def test_tool_list_is_exactly_the_m1_set_and_none_can_act_on_x(server: Any) -> N
     names = {t.name for t in tools}
     assert names == TOOLS
     assert not any(
-        word in n for n in names for word in ("post_to", "tweet", "like", "reply", "follow", "approve")
+        word in n.replace("get_follower_forecast", "")
+        for n in names
+        for word in ("post_to", "tweet", "like", "reply", "follow", "approve")
     )
     for t in tools:
         assert t.description and t.output_schema, t.name
@@ -228,3 +236,23 @@ def test_experiment_tools_end_to_end_and_no_agent_approval(server: Any) -> None:
 
     stopped = call(server, "stop_experiment", experiment="E03", reason="done testing")
     assert stopped["experiment"]["status"] == "stopped"
+
+
+def test_m3_tools_goals_model_and_monitors(server: Any) -> None:
+    status = call(server, "model_status")
+    assert status["stage"] == "prior_only" and status["card"]["champion"] == "nb2"
+    cal = call(server, "get_calibration")
+    assert cal["hit_80"]["n"] > 20 and "80% intervals held" in cal["summary"]
+    mon = call(server, "get_monitors")
+    assert {m["chart"] for m in mon["monitors"]} >= {"d1_location", "d3"}
+    refused = call(server, "acknowledge_alarm", alarm_id=99999)
+    assert refused["acknowledged"] is False
+    when = (datetime.now(UTC) + timedelta(days=30)).isoformat()
+    goal = call(server, "set_goal", scope="followers", target=900, target_at=when)
+    assert goal["saved"] and [c["goal"]["target"] for c in goal["current"]] == [900]
+    bad = call(server, "set_goal", scope="posts", target=-1)
+    assert not bad["saved"]
+    ff = call(server, "get_follower_forecast")
+    assert ff["tiles"]["followers"]["value"] and ff["goal"]["goal"]["target"] == 900
+    card = list(asyncio.run(server.read_resource("socialmgr://model/card")))
+    assert "Model card: nb2" in str(card[0].content)
