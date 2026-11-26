@@ -488,7 +488,7 @@ function GatesPanel({ m, tz }: { m: ModelHealth; tz: string }) {
           subtitle={
             r
               ? `last review ${formatDateTime(r.at, tz)} · ${r.candidate} vs ${r.champion_before}`
-              : `first review at ${m.owner_terms_at} matured posts`
+              : `first review at ${m.first_review_at} matured posts`
           }
           showAction={false}
           className="min-w-0 flex-1"
@@ -543,7 +543,7 @@ function GatesPanel({ m, tz }: { m: ModelHealth; tz: string }) {
         </>
       ) : (
         <p className="px-4 text-xs leading-[1.45] text-faint">
-          No promotion review yet. The first runs once {m.owner_terms_at} owner posts have matured and the owner-level model
+          No promotion review yet. The first runs once {m.first_review_at} owner posts have matured and the owner-level model
           can be fitted; a candidate replaces the champion only if every MODEL §5 gate passes. Until then the{" "}
           {m.stage === "prior_only" ? "prior-only" : "current"} model stays, and a failed gate is logged here.
         </p>

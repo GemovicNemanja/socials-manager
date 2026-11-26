@@ -160,6 +160,7 @@ class ModelHealthOut(Envelope):
     stage: Stage
     owner_n: int
     owner_terms_at: int  # matured owner posts needed for owner-level terms (20)
+    first_review_at: int  # matured owner posts before the first promotion review (40)
     hit_80: HitRateTile
     hit_50: HitRateTile
     skill: SkillTile

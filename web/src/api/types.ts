@@ -1720,6 +1720,8 @@ export interface components {
             owner_n: number;
             /** Owner Terms At */
             owner_terms_at: number;
+            /** First Review At */
+            first_review_at: number;
             hit_80: components["schemas"]["HitRateTile"];
             hit_50: components["schemas"]["HitRateTile"];
             skill: components["schemas"]["SkillTile"];

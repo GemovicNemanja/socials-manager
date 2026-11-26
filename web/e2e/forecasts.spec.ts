@@ -78,7 +78,7 @@ test.describe("Forecasts screen", () => {
 
     const gates = page.getByRole("region", { name: "Release gates" });
     if (m.last_review == null) {
-      await expect(gates.getByText(`first review at ${m.owner_terms_at} matured posts`)).toBeVisible();
+      await expect(gates.getByText(`first review at ${m.first_review_at} matured posts`)).toBeVisible();
       await expect(gates.getByText(/No promotion review yet/)).toBeVisible();
     } else {
       await expect(gates.getByRole("table", { name: "Gates" }).getByRole("rowgroup").getByRole("row")).toHaveCount(m.last_review.gates.length);

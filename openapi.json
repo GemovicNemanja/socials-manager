@@ -4885,6 +4885,10 @@
             "type": "integer",
             "title": "Owner Terms At"
           },
+          "first_review_at": {
+            "type": "integer",
+            "title": "First Review At"
+          },
           "hit_80": {
             "$ref": "#/components/schemas/HitRateTile"
           },
@@ -4984,6 +4988,7 @@
           "stage",
           "owner_n",
           "owner_terms_at",
+          "first_review_at",
           "hit_80",
           "hit_50",
           "skill",

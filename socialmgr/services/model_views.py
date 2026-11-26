@@ -254,6 +254,7 @@ def model_health(session: Session, settings: Settings) -> h.ModelHealthOut:
         stage=stage,
         owner_n=owner_n,
         owner_terms_at=pipeline.OWNER_TERMS_MIN_POSTS,
+        first_review_at=2 * pipeline.OWNER_TERMS_MIN_POSTS,
         hit_80=hit(0.8, [r.in_80 for r in window]),
         hit_50=hit(0.5, [r.in_50 for r in window]),
         skill=h.SkillTile(
