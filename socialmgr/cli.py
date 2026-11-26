@@ -264,7 +264,8 @@ def plan(
 @app.command()
 def mcp() -> None:
     """Serve the agent tools over MCP (stdio). Add to Claude Code with:
-    claude mcp add socialmgr -- uv run --directory <this folder> socialmgr mcp"""
+    claude mcp add --scope user socialmgr -- uv run --quiet --directory <this folder> socialmgr mcp
+    (`socialmgr setup` does this for you)."""
     from socialmgr.agent_server import main
 
     main()
@@ -284,6 +285,10 @@ app.add_typer(journal_app, name="journal")
 from socialmgr.backtest.cli import backtest_app  # noqa: E402  (sub-app registration)
 
 app.add_typer(backtest_app, name="backtest")
+
+from socialmgr.setup.cli import register as register_setup  # noqa: E402  (setup, launch, stop, schedule)
+
+register_setup(app)
 
 
 def _db() -> tuple[Settings, sessionmaker[Session]]:
