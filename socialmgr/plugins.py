@@ -5,6 +5,7 @@ from socialmgr.core.interfaces import DataProvider, ForecastModel, Labeler, Prio
 from socialmgr.core.registry import Registry
 from socialmgr.labelling.llm import AnthropicApiLabeler, ClaudeCodeLabeler, NoLabeler
 from socialmgr.modelling.models.nb2 import NB2PriorModel
+from socialmgr.modelling.models.nb2_owner import NB2OwnerModel
 from socialmgr.modelling.models.trailing_median import TrailingMedianModel
 from socialmgr.modelling.priors.hand_set import HandSetPrior
 from socialmgr.providers.fake import FakeOwnerProvider, FakePublicProvider
@@ -46,6 +47,13 @@ def _trailing_median(settings: Settings) -> ForecastModel:
 @models.register("nb2")
 def _nb2(settings: Settings) -> ForecastModel:
     return NB2PriorModel()
+
+
+@models.register("nb2_owner")
+def _nb2_owner(settings: Settings) -> ForecastModel:
+    # Prior-only NB2 (identical draws and version) below 20 matured owner posts; owner-level
+    # intercepts and dispersion from then on (plan §6). Promotion to champion is a config switch.
+    return NB2OwnerModel()
 
 
 @labelers.register("claude_code")
