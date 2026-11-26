@@ -66,7 +66,7 @@ def model_status(session: Session, settings: Settings) -> ModelStatusResponse:
         f"Champion: {m.card.champion} ({m.card.outcome_model}); stage {m.stage}, {m.owner_n} matured posts."
     )
     if review is None:
-        summary += f" First promotion review at {m.owner_terms_at} matured posts."
+        summary += f" First promotion review at {m.first_review_at} matured posts."
     else:
         failed = [g.label for g in review.gates if g.passed is False]
         summary += f" Last review {review.at:%b %d}: {review.decision} ({review.reason})."
