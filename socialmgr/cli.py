@@ -281,6 +281,10 @@ from socialmgr.journal.cli import journal_app  # noqa: E402  (sub-app registrati
 
 app.add_typer(journal_app, name="journal")
 
+from socialmgr.backtest.cli import backtest_app  # noqa: E402  (sub-app registration)
+
+app.add_typer(backtest_app, name="backtest")
+
 
 def _db() -> tuple[Settings, sessionmaker[Session]]:
     settings = _settings()
