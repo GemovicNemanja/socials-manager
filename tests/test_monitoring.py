@@ -72,6 +72,10 @@ def test_a_reach_collapse_raises_one_location_alarm_and_it_can_be_acknowledged(t
         assert raised and all(a.direction == "down" for a in raised), [
             (a.raised_at, a.direction) for a in raised
         ]
+        from socialmgr.db.models import Briefing
+
+        alarm_run = session.scalar(select(Briefing).where(Briefing.run_id == raised[0].run_id))
+        assert alarm_run is not None and "Alarm: location drift on 48h impressions" in alarm_run.summary
         # At most one alarm per chart per run.
         assert len({a.run_id for a in raised}) == len(raised)
         acked = alarms.acknowledge(

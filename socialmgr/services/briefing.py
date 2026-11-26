@@ -81,6 +81,9 @@ def build(session: Session, settings: Settings, run: Run) -> dict[str, Any]:
         "upcoming": [{"slot": f"slot:{s.id}", "planned_at": s.planned_at.isoformat()} for s in upcoming],
         "curve_version": result("fit_curve").get("curve_version"),
         "experiments": result("experiments"),
+        "model_review": result("review_model"),
+        "monitors": result("monitors"),
+        "followers": result("followers"),
         "spend": {
             "run_usd": round(pipeline.run_spend(session, run.id), 4),
             "month_usd": round(pipeline.month_spend(session, settings.workspace_id, run.cutoff_at), 4),
@@ -115,6 +118,42 @@ def experiment_lines(exp: dict[str, Any]) -> list[str]:
     return lines
 
 
+CHART_TEXT = {
+    "d1_location": "location drift on 48h impressions",
+    "d1_scale": "scale drift on 48h impressions",
+    "d1_followers": "follower-gain drift",
+    "d3": "adaptive intervals (D3)",
+}
+STATUS_TEXT = {"working": "Working", "near": "Near threshold", "not_working": "Not working"}
+
+
+def model_lines(data: dict[str, Any]) -> list[str]:
+    """Promotion reviews, drift alarms, how the last follower forecasts landed, and goal status."""
+    lines = []
+    review = data.get("model_review") or {}
+    if review.get("decision") in ("promoted", "held"):
+        lines.append(f"Model review: {review['decision']} ({review.get('reason', '')}).")
+    for chart in (data.get("monitors") or {}).get("alarms", []):
+        lines.append(
+            f"Alarm: {CHART_TEXT.get(chart, chart)}. Forecasts may be off; see Forecasts or get_monitors."
+        )
+    followers = data.get("followers") or {}
+    for sc in followers.get("scored", [])[:2]:
+        lines.append(
+            f"Followers: the {sc['horizon_days']}-day forecast from {sc['made_at'][:10]} expected "
+            f"{sc['q10']:,.0f}-{sc['q90']:,.0f}; actual {sc['actual']:,} ({LABEL_TEXT[sc['outcome']]})."
+        )
+    for g in followers.get("goals", []):
+        change = (
+            f" (was {STATUS_TEXT.get(g['previous'], g['previous'])})"
+            if g.get("previous") and g["previous"] != g["status"]
+            else ""
+        )
+        chance = f", P(goal met) {g['p_goal']:.0%}" if g.get("p_goal") is not None else ""
+        lines.append(f"Goal ({g['scope']}): {STATUS_TEXT.get(g['status'], g['status'])}{change}{chance}.")
+    return lines
+
+
 def summarize(data: dict[str, Any]) -> str:
     lines = []
     scored = data["scored"]
@@ -141,6 +180,7 @@ def summarize(data: dict[str, Any]) -> str:
             f"Planned posts: {planned.get('matched', 0)} published, {planned.get('missed', 0)} missed."
         )
     lines += experiment_lines(data.get("experiments") or {})
+    lines += model_lines(data)
     spend = data["spend"]
     lines.append(
         f"Spend: ${spend['run_usd']:.3f} this run, "
