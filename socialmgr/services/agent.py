@@ -78,8 +78,9 @@ def _envelope(
     if not calibrated:
         reason = "prior_only_uncalibrated"
         notes.append(
-            "Forecasts still come from priors only (owner-level terms need 20 matured posts and the M3 "
-            f"model; {owner_n} matured so far): treat ranges as rough."
+            "Forecasts still come from priors only: the owner-level model is first reviewed at 40 matured "
+            f"posts and replaces them only if every release gate passes ({owner_n} matured so far). "
+            "Treat ranges as rough."
         )
     return {
         "summary": summary,
@@ -148,7 +149,11 @@ def _run_status(run: Run) -> RunStatus:
         steps=[
             StepStatus(
                 name=name,
-                status=steps.get(name, {}).get("status", "pending"),
+                # A finished or abandoned run that has no record of a step never ran it (skipped, or
+                # the step was added after the run); only an unfinished run has steps still pending.
+                status=steps.get(name, {}).get(
+                    "status", "pending" if run.status in ("running", "failed") else "not_run"
+                ),
                 error=steps.get(name, {}).get("error"),
             )
             for name in runs.STEPS.names

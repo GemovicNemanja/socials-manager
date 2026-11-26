@@ -101,12 +101,9 @@ def test_overview_recent_posts_reuse_post_items(settings: Settings, loaded: sess
     assert recent == first_page
 
 
-def test_overview_names_pending_areas(settings: Settings, loaded: sessionmaker[Session]) -> None:
-    areas = {a["area"]: a["milestone"] for a in overview(settings)["pending_areas"]}
-    assert areas["follower_forecast"] == "M3"
-    assert areas["model_health"] == "M3"
-    # The briefing and planned posts shipped in M1 (/api/briefing, /api/planned).
-    assert "briefing" not in areas and "planned_posts" not in areas
+def test_overview_has_no_pending_areas_after_m3(settings: Settings, loaded: sessionmaker[Session]) -> None:
+    # Follower forecast, model health and goals shipped in M3; the briefing and planned posts in M1.
+    assert overview(settings)["pending_areas"] == []
 
 
 def test_overview_ignores_slot_forecasts(settings: Settings, loaded: sessionmaker[Session]) -> None:
