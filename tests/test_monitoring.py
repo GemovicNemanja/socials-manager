@@ -15,7 +15,7 @@ from socialmgr.db.session import make_engine, session_factory
 from socialmgr.labelling.llm import NoLabeler
 from socialmgr.providers.fake.provider import FakeOwnerProvider
 from socialmgr.services import alarms, model_views, runs
-from socialmgr.services.fixtures import load_fixture
+from socialmgr.services.fixtures import HEAVY, load_fixture
 from socialmgr.services.plugins import load_plugins
 from tests.conftest import make_settings
 from tests.test_review_fixes import T
@@ -62,7 +62,7 @@ def test_a_reach_collapse_raises_one_location_alarm_and_it_can_be_acknowledged(t
         load_fixture(session, settings, plugins, until=T)
         for d in range(1, 15):
             at = T + timedelta(days=d)
-            runs.execute(session, settings, plugins, clock=lambda at=at: at, cutoff=at)
+            runs.execute(session, settings, plugins, clock=lambda at=at: at, cutoff=at, skip=HEAVY)
         # Posts from before the collapse mature for two more days; after that the drop shows.
         raised = session.scalars(
             select(Alarm)

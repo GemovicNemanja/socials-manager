@@ -1656,6 +1656,10 @@ export interface components {
             exact: boolean;
             /** Provisional */
             provisional: boolean;
+            /** P Above Median */
+            p_above_median?: number | null;
+            /** Method */
+            method?: string | null;
         };
         /** Kpi */
         Kpi: {

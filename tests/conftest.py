@@ -39,7 +39,7 @@ def fixture_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     engine = make_engine(template)
     migrate.upgrade(engine)
     with session_factory(engine)() as session:
-        load_fixture(session, template, load_plugins(template), until=FIXTURE_UNTIL)
+        load_fixture(session, template, load_plugins(template), until=FIXTURE_UNTIL, full=True)
         session.commit()
     engine.dispose()
     return template.db_path

@@ -20,13 +20,23 @@ from socialmgr.services.plugins import ActivePlugins
 
 RUN_HOUR_UTC = 6
 FIXTURE_SKIP = frozenset({"backup"})
-# The follower step (4,000 Monte Carlo paths, ~0.5 s) runs only for the fixture's last days: enough
-# for 7-day follower forecasts to be frozen and scored, without slowing every test that builds one.
+# The follower step (4,000 Monte Carlo paths, ~0.5 s) and the model review (a backtest, seconds) are
+# the slow steps. With ``full`` they run as in production for the fixture's last days (follower step)
+# and last run (review): enough for follower forecasts to be frozen and scored and for one promotion
+# review. Without it (most tests) they are skipped, so building a fixture stays fast.
 FOLLOWER_DAYS = timedelta(days=10)
+HEAVY = frozenset({"followers", "review_model"})
 
 
-def _skip(cutoff: datetime, until: datetime) -> frozenset[str]:
-    return FIXTURE_SKIP if cutoff > until - FOLLOWER_DAYS else FIXTURE_SKIP | {"followers"}
+def _skip(cutoff: datetime, until: datetime, full: bool) -> frozenset[str]:
+    if not full:
+        return FIXTURE_SKIP | HEAVY
+    skip = set(FIXTURE_SKIP)
+    if cutoff <= until - FOLLOWER_DAYS:
+        skip.add("followers")
+    if cutoff + timedelta(days=1) <= until:
+        skip.add("review_model")
+    return frozenset(skip)
 
 
 @dataclass(frozen=True)
@@ -64,8 +74,11 @@ def load_fixture(
     until: datetime,
     start: datetime = DEFAULT_START,
     gap: timedelta | Sequence[timedelta] = timedelta(days=1),
+    full: bool = False,
 ) -> FixtureSummary:
-    """Run every step but the backup at each cutoff, with LLM labelling off (no network)."""
+    """Run every step but the backup at each cutoff, with LLM labelling off (no network).
+
+    ``full`` also runs the follower step and the model review near the end (see ``HEAVY``)."""
     plugins = dataclasses.replace(plugins, labeler=NoLabeler())
     pipeline.ensure_accounts(session, settings, start)
     times = run_times(start, until, gap)
@@ -77,7 +90,7 @@ def load_fixture(
             trigger="fixture",
             clock=lambda c=cutoff: c,  # type: ignore[misc]
             cutoff=cutoff,
-            skip=_skip(cutoff, until),
+            skip=_skip(cutoff, until, full),
         )
     return FixtureSummary(
         runs=len(times),
@@ -124,6 +137,7 @@ def load_experiment_demo(
     plugins: ActivePlugins,
     until: datetime,
     start: datetime = DEFAULT_START,
+    full: bool = False,
 ) -> FixtureSummary:
     """The fixture account plus three weeks of a running E03 x E06 factorial (end-to-end tests only).
 
@@ -159,7 +173,7 @@ def load_experiment_demo(
             trigger="fixture",
             clock=lambda c=cut: c,  # type: ignore[misc]
             cutoff=cut,
-            skip=_skip(cut, until),
+            skip=_skip(cut, until, full),
         )
     return FixtureSummary(
         runs=len(run_times(start, until)),

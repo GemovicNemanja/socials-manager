@@ -133,6 +133,7 @@ class TrainingExample(Frozen):
     type: PostType
     followers_at_post: int
     outcome_i48: float
+    has_url: bool = False
 
 
 class ForecastSubject(Frozen):

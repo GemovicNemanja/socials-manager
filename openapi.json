@@ -4654,6 +4654,28 @@
           "provisional": {
             "type": "boolean",
             "title": "Provisional"
+          },
+          "p_above_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Above Median"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
           }
         },
         "type": "object",

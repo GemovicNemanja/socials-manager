@@ -107,10 +107,11 @@ def _display_rows(
         )
     g = report.goal
     if g is not None:
-        detail = {
-            "too_hard": f"Hit rate {g.pi_bar:.0%}: goal looks too hard; suggest {g.suggestion:,.0f}",
-            "too_easy": f"Hit rate {g.pi_bar:.0%}: goal looks too easy; suggest {g.suggestion:,.0f}",
-        }.get(g.status, g.status.replace("_", " "))
+        if g.status in ("too_hard", "too_easy") and g.pi_bar is not None and g.suggestion is not None:
+            which = "too hard" if g.status == "too_hard" else "too easy"
+            detail = f"Hit rate {g.pi_bar:.0%}: goal looks {which}; suggest {g.suggestion:,.0f}"
+        else:
+            detail = g.status.replace("_", " ")
         rows.append(
             (
                 "d2",
@@ -183,17 +184,37 @@ def run_step(
             )
         )
     # One alarm per chart per run: a persisting drift re-fires within a few posts after the h/2 reset.
+    # While an alarm is open (not acknowledged), a chart that fires again the same way adds to it instead of
+    # paging again: a persisting drift re-fires every few posts after the h/2 reset.
+    open_by_chart = {
+        (a.chart, a.direction): a
+        for a in session.scalars(
+            select(Alarm).where(Alarm.workspace_id == ws, Alarm.acknowledged_at.is_(None))
+        )
+    }
     raised: dict[str, Alarm] = {}
+    repeated: list[str] = []
     for a in report.alarms:
         chart = DISPLAY.get(a.chart, a.chart)
         if chart in raised:
+            continue
+        direction = {"upper": "up", "lower": "down"}.get(a.side or "", a.side)
+        if (chart, direction) in open_by_chart:
+            row = open_by_chart[(chart, direction)]
+            row.detail = {
+                **row.detail,
+                "repeats": int(row.detail.get("repeats", 0)) + 1,
+                "last_run_id": run.id,
+            }
+            if chart not in repeated:
+                repeated.append(chart)
             continue
         raised[chart] = Alarm(
             workspace_id=ws,
             chart=chart,
             run_id=run.id,
             raised_at=run.cutoff_at,
-            direction={"upper": "up", "lower": "down"}.get(a.side or "", a.side),
+            direction=direction,
             stat=a.statistic,
             threshold=a.threshold,
             attribution="unknown",
@@ -208,6 +229,7 @@ def run_step(
         "armed": report.armed,
         "new_posts": len(new_pits),
         "alarms": sorted(raised),
+        "repeated_alarms": repeated,
         "diagnostics": report.diagnostics is not None,
         "gap_days": gap,
         "notes": list(report.notes),

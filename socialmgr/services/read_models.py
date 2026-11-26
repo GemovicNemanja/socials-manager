@@ -52,6 +52,9 @@ class I48(BaseModel):
     value: float | None
     exact: bool
     provisional: bool
+    # Under 48h: the batch nowcast's P(I48 > the frozen forecast's median) and how it was made.
+    p_above_median: float | None = None
+    method: str | None = None
 
 
 class ForecastSummary(BaseModel):
@@ -245,6 +248,9 @@ def list_posts(
             by_post.setdefault(lb.post_id, []).append(lb)
         labels = {pid: {f: lb.value for f, lb in pick_labels(rows).items()} for pid, rows in by_post.items()}
         curve = curve_as_of(session, settings.workspace_id, last_run.cutoff_at if last_run else None)
+        from socialmgr.services.nowcast_step import latest_nowcasts
+
+        nowcasts = latest_nowcasts(session, settings.workspace_id)
         owner_n = sum(1 for s in scores.values() if not s.late_maturity)
         for post in posts:
             fc = forecasts.get(f"post:{post.id}")
@@ -253,6 +259,15 @@ def list_posts(
             age_h = snap.age_s / 3600 if snap else 0.0
             if sc is not None:
                 i48 = I48(value=round(sc.outcome), exact=sc.exact, provisional=False)
+            elif post.id in nowcasts:
+                n = nowcasts[post.id]
+                i48 = I48(
+                    value=round(float(n.quantiles["q50"])),
+                    exact=False,
+                    provisional=True,
+                    p_above_median=round(n.p_gt_median, 3),
+                    method=n.method,
+                )
             elif snap is not None and snap.impressions is not None:
                 estimate = curve.estimate_i48(snap.impressions, age_h)
                 i48 = I48(

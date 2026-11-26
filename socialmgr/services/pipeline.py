@@ -585,6 +585,7 @@ def matured_examples(
                     else earliest_followers(session, post.account_id) or 0
                 ),
                 outcome_i48=round(estimate, 3),
+                has_url=post.has_url,
             )
         )
     return sorted(examples, key=lambda e: (e.created_at, e.post_external_id))
