@@ -22,14 +22,14 @@ from socialmgr.modelling.backtest import BacktestPost, run_backtest
 from socialmgr.modelling.models.nb2_owner import NB2OwnerModel
 from socialmgr.modelling.monitors import location_chart, pit_to_z
 from socialmgr.modelling.release import GateThresholds, evaluate_release, week_block_bootstrap_skill
-from socialmgr.services import pipeline
+from socialmgr.services import pipeline, read_models
 from socialmgr.services.plugins import ActivePlugins
 
 CANDIDATE = "nb2_owner"
 REVIEW_EVERY = 21  # MODEL §4.3's diagnostic cadence
 # Owner terms start at 20 matured posts, and the backtest scores each later post, so the gates (which
 # need 20 scored posts) can first pass at 40: the first review waits until then.
-FIRST_REVIEW_AT = 2 * pipeline.OWNER_TERMS_MIN_POSTS
+FIRST_REVIEW_AT = read_models.FIRST_REVIEW_AT
 LATE_S = 14 * 86400
 # The gate-4 CUSUM runs over the diagnostic window: over a whole long backtest its false-hold chance
 # grows with length (13% at 57 posts, 63% at 300 for calibrated forecasts).

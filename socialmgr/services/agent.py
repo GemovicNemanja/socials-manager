@@ -77,11 +77,10 @@ def _envelope(
     reason = None
     if not calibrated:
         reason = "prior_only_uncalibrated"
-        notes.append(
-            "Forecasts still come from priors only: the owner-level model is first reviewed at 40 matured "
-            f"posts and replaces them only if every release gate passes ({owner_n} matured so far). "
-            "Treat ranges as rough."
-        )
+        note = read_models.prior_only_caveat(owner_n)
+        # Read models carry the same caveat; say it once.
+        notes = [n for n in notes if not n.startswith("Forecasts still come from priors only")]
+        notes.append(note)
     return {
         "summary": summary,
         "confidence": confidence_for(owner_n, calibrated),
