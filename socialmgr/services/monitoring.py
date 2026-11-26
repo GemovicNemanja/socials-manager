@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from socialmgr.core.config import Settings
-from socialmgr.db.models import Alarm, Forecast, MonitorState, Run
+from socialmgr.db.models import Alarm, Forecast, ModelReview, MonitorState, Run
 from socialmgr.modelling.monitors import (
     GoalInputs,
     MonitorReport,
@@ -137,7 +137,11 @@ def run_step(
         return {"skipped": "no owner account"}
     previous, _ = _previous(session, ws, run.cutoff_at)
     gap = typical_gap_days(session, owner.id, run.cutoff_at)
-    state = previous or initial_state(gap)
+    # A promotion this run changes what forecasts mean: charts restart from zero ("refit, PIT reset").
+    promoted = session.scalar(
+        select(ModelReview.id).where(ModelReview.run_id == run.id, ModelReview.decision == "promoted")
+    )
+    state = initial_state(gap) if promoted or previous is None else previous
     scored = scored_posts(session, ws, until=run.cutoff_at)
     new_pits = [r.pit_rand for r in scored if r.run_id == run.id]
     f_pits, f_armed = follower_pits(session, settings, run) if follower_pits else ([], False)
