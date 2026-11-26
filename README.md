@@ -111,13 +111,34 @@ uv run socialmgr probe
 
 Run it on your first day and again about a day later (the second run checks the follower list order against the first). It reports the timeline rate limit, the follower order and whether X's analytics endpoint is available; reports are saved under `data/probes/`.
 
+## Public journal
+
+A static site of your account growing in public (Journal, weekly entries, Experiments, Method), published to GitHub Pages from a separate public repository.
+
+```sh
+uv run socialmgr journal draft --week 0     # writes data/journal/entries/week-00.md (the plan)
+# edit it; replace every TODO with your own words
+uv run socialmgr serve                      # preview at http://127.0.0.1:8765/journal/ (drafts marked)
+uv run socialmgr journal publish --week 0   # marks it published and pushes the site
+uv run socialmgr journal status
+```
+
+Set the public repository in `.env` once (create it on GitHub first and turn on Pages for its `main` branch):
+
+```sh
+SOCIALMGR_JOURNAL__REPO=git@github.com-personal:you/growing-in-public.git
+SOCIALMGR_JOURNAL__SITE_URL=https://you.github.io/growing-in-public/
+```
+
+After the first publish, every daily run refreshes the public numbers (followers, scored posts, hit rate, experiments). Weekly entries go public only when you publish them, and drafts never leave your Mac. Agents can draft entries (`draft_journal_entry`) but can't publish.
+
 ## Using it from Claude Code (MCP)
 
 ```sh
 claude mcp add socialmgr -- uv run --directory /path/to/socials-manager socialmgr mcp
 ```
 
-Tools: `get_briefing`, `start_run`, `get_run_status`, `get_posts`, `get_post`, `get_forecast` (frozen, or a draft for a post you might write), `register_planned_post`, `get_schedule`, `set_label`, `get_account_overview`, `export_data`; experiments (`get_experiments`, `get_experiment`, `power_check`, `propose_experiment`, `register_slots`, `schedule_experiment`, `amend_experiment`, `stop_experiment`, `get_readout`, `list_approvals`); followers, goals and the model (`get_follower_forecast`, `set_goal`, `model_status`, `get_calibration`, `get_monitors`, `acknowledge_alarm`). Resources: `socialmgr://briefing/latest`, `socialmgr://model/card`. Prompts: `weekly_review` ("summarise last week against the forecasts") and `plan_next_week` (draft forecasts, then freeze the ones you confirm).
+Tools: `get_briefing`, `start_run`, `get_run_status`, `get_posts`, `get_post`, `get_forecast` (frozen, or a draft for a post you might write), `register_planned_post`, `get_schedule`, `set_label`, `get_account_overview`, `export_data`; experiments (`get_experiments`, `get_experiment`, `power_check`, `propose_experiment`, `register_slots`, `schedule_experiment`, `amend_experiment`, `stop_experiment`, `get_readout`, `list_approvals`); followers, goals and the model (`get_follower_forecast`, `set_goal`, `model_status`, `get_calibration`, `get_monitors`, `acknowledge_alarm`); the journal (`get_journal`, `draft_journal_entry`). Resources: `socialmgr://briefing/latest`, `socialmgr://model/card`. Prompts: `weekly_review` ("summarise last week against the forecasts") and `plan_next_week` (draft forecasts, then freeze the ones you confirm).
 
 Try: *"Use the socialmgr weekly_review prompt"*, *"How did my posts do this week?"*, *"Plan three posts for next week and freeze their forecasts."* No tool can post, like, reply or follow on X, change a frozen forecast or approve anything.
 

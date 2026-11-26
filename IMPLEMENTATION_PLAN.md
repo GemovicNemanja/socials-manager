@@ -340,6 +340,28 @@ On branch `m3-model-health`. Everything below runs in the daily run, in this ord
 
 ---
 
+### M4: public journal (2026-11-26)
+
+Added after v1 at the owner's request: the canvas's five public pages (Journal, Journal Entry, Experiments, Experiment, Method) as a static site, so the account can grow in public.
+
+**Decisions (owner, 2026-11-26):**
+
+| Question | Decision |
+|---|---|
+| Hosting | GitHub Pages, from a separate public repository; the app's repository stays private |
+| Updates | The numbers (followers, scored posts, hit rate, experiments) refresh after each daily run, once the first entry is published; weekly entries become public only when the owner publishes them |
+| Entries | The app drafts each weekly entry from the week's data (week 0 introduces the plan); the owner edits and publishes. No MCP tool can publish |
+| Pages | All five designed pages |
+
+**How it works:**
+- Entries are markdown files with a small front matter in `data/journal/entries/` (local, private). Experiment write-ups ("answer", "why I tested it", "what I changed") live in `data/journal/experiments/<key>.md`.
+- `socialmgr journal draft [--week N]` writes a draft with TODO markers where only the owner knows the story. `socialmgr journal publish --week N` refuses an entry that still has them, marks it published and pushes the site.
+- The site is the prebuilt public app (`web/dist-journal`) plus one `data.json` snapshot built with `preview=false`, so drafts never leave the machine. `socialmgr serve` previews it at `/journal/`, drafts included and marked.
+- Publishing commits to the configured repository (`SOCIALMGR_JOURNAL__REPO`) with the owner's git identity, never force-pushes, and never touches the app's own repository. A failed refresh is a caveat in the next briefing, not a failed run.
+- Public data is limited to followers, impressions, likes per 1k, forecast ranges and outcomes of the owner's posts, experiment results, and published entries.
+
+---
+
 ## 10. Testing
 
 - **Unit:** label rules, orchestrator (order, resume, idempotency), capture ages and maturity offsets, randomization, slot matching, e-LOND bookkeeping, MinHash thresholds, cost tally.
@@ -389,7 +411,7 @@ On branch `m3-model-health`. Everything below runs in the daily run, in this ord
 | Premium | From launch; E12 dropped |
 | Budgets | Monthly cap in config, default $15 |
 | Approvals | Web app or CLI only |
-| Journal | Out of v1 |
+| Journal | Out of v1; added as M4 (static site on GitHub Pages, owner-published entries) |
 | Run cadence | About daily |
 | Deletions | Removed at the next run |
 | MCP schemas | Pydantic, per milestone |
