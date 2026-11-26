@@ -401,10 +401,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model
+         * @description The Forecasts screen: model card, release gates, calibration, drift monitors, changes.
+         */
+        get: operations["model_api_model_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alarms/{alarm_id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ack Alarm
+         * @description Acknowledge a detector alarm. Nothing else changes.
+         */
+        post: operations["ack_alarm_api_alarms__alarm_id__ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Followers
+         * @description The Account screen's follower panels: tiles, follower forecast band, funnel, goal, past.
+         */
+        get: operations["followers_api_followers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Goals List
+         * @description Current goals with their status, and every goal ever set.
+         */
+        get: operations["goals_list_api_goals_get"];
+        put?: never;
+        /**
+         * Set Goal
+         * @description Set a goal: supersedes the scope's current goal and starts a new period (logged).
+         */
+        post: operations["set_goal_api_goals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/goals/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Goal
+         * @description Where you'd stand today against a goal you haven't saved: P(goal met), median path.
+         */
+        post: operations["preview_goal_api_goals_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AckIn */
+        AckIn: {
+            /** Note */
+            note?: string | null;
+        };
+        /** AckOut */
+        AckOut: {
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Summary */
+            summary: string;
+            alarm: components["schemas"]["AlarmOut"] | null;
+        };
+        /** AlarmOut */
+        AlarmOut: {
+            /** Id */
+            id: number;
+            /** Chart */
+            chart: string;
+            /** Label */
+            label: string;
+            /**
+             * Raised At
+             * Format: date-time
+             */
+            raised_at: string;
+            /** Direction */
+            direction: string | null;
+            /** Stat */
+            stat: number | null;
+            /** Threshold */
+            threshold: number | null;
+            /** Attribution */
+            attribution: string;
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Note */
+            note: string | null;
+        };
         /** ApprovalCardOut */
         ApprovalCardOut: {
             /** Id */
@@ -575,6 +718,66 @@ export interface components {
             /** In 80 Rate */
             in_80_rate: number | null;
         };
+        /** CalibrationTile */
+        CalibrationTile: {
+            /** Berkowitz P */
+            berkowitz_p: number | null;
+            /** Pit Chi2 P */
+            pit_chi2_p: number | null;
+            /** Passed */
+            passed: boolean | null;
+            /** N */
+            n: number;
+        };
+        /**
+         * ChangeRowOut
+         * @description A dated change that can shift performance: ranker changes, model releases, goals.
+         */
+        ChangeRowOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "Model" | "X ranker repo" | "Account" | "Goal" | "Monitor";
+            /** Text */
+            text: string;
+            /** Action */
+            action: string;
+        };
+        /** ChartPoint */
+        ChartPoint: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Value */
+            value: number;
+        };
+        /** CountTile */
+        CountTile: {
+            /** Value */
+            value: number | null;
+            /** Per Day */
+            per_day: number | null;
+            expected: components["schemas"]["ExpectedVsActual"] | null;
+            /** Note */
+            note: string | null;
+        };
+        /** CoverageRow */
+        CoverageRow: {
+            /** Level */
+            level: number;
+            /** Value */
+            value: number | null;
+            /** N */
+            n: number;
+        };
         /**
          * CurvePoint
          * @description The frozen 48h forecast mapped to an earlier or later age with the forecast's maturity curve.
@@ -665,6 +868,27 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * DriftTile
+         * @description D1 location CUSUM on 48h impressions.
+         */
+        DriftTile: {
+            /** Armed */
+            armed: boolean;
+            /** Stat */
+            stat: number | null;
+            /** Threshold */
+            threshold: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "off" | "quiet" | "alarm";
+            /** Last Alarm At */
+            last_alarm_at: string | null;
+            /** Reason */
+            reason: string;
+        };
         /** ELondEntryOut */
         ELondEntryOut: {
             /** Factor */
@@ -696,6 +920,15 @@ export interface components {
              */
             alpha: number;
         };
+        /** Elasticity */
+        Elasticity: {
+            /** Q50 */
+            q50: number;
+            /** Q10 */
+            q10: number;
+            /** Q90 */
+            q90: number;
+        };
         /**
          * ExpectedRange
          * @description The 10/50/90% quantiles of a KPI's predictive distribution and where the actual landed.
@@ -718,6 +951,27 @@ export interface components {
             n_posts: number;
             /** Method */
             method: string;
+        };
+        /**
+         * ExpectedVsActual
+         * @description A past expectation and how the actual landed against it (MODEL §4.1 thresholds).
+         */
+        ExpectedVsActual: {
+            expected: components["schemas"]["FollowerRange"];
+            /** Actual */
+            actual: number;
+            /** Percentile */
+            percentile: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "above" | "as_expected" | "below";
+            /**
+             * Made At
+             * Format: date-time
+             */
+            made_at: string;
         };
         /** ExperimentActionOut */
         ExperimentActionOut: {
@@ -971,6 +1225,45 @@ export interface components {
             /** E Value */
             e_value: number | null;
         };
+        /** FollowerBandPoint */
+        FollowerBandPoint: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Q10 */
+            q10: number;
+            /** Q50 */
+            q50: number;
+            /** Q90 */
+            q90: number;
+        };
+        /** FollowerForecastOut */
+        FollowerForecastOut: {
+            /** Id */
+            id: number;
+            /**
+             * Made At
+             * Format: date-time
+             */
+            made_at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prior_only" | "calibrated";
+            /** Model Version */
+            model_version: string;
+            /** Start Followers */
+            start_followers: number;
+            /** Band */
+            band: components["schemas"]["FollowerBandPoint"][];
+            /** Horizons */
+            horizons: {
+                [key: string]: components["schemas"]["FollowerRange"];
+            };
+        };
         /** FollowerPoint */
         FollowerPoint: {
             /**
@@ -981,6 +1274,56 @@ export interface components {
             /** Followers */
             followers: number;
         };
+        /** FollowerRange */
+        FollowerRange: {
+            /** Q10 */
+            q10: number;
+            /** Q50 */
+            q50: number;
+            /** Q90 */
+            q90: number;
+        };
+        /**
+         * FollowerScoreOut
+         * @description A frozen follower forecast whose horizon has passed, against the actual count.
+         */
+        FollowerScoreOut: {
+            /** Forecast Id */
+            forecast_id: number;
+            /**
+             * Made At
+             * Format: date-time
+             */
+            made_at: string;
+            /** Horizon Days */
+            horizon_days: number;
+            /**
+             * Target At
+             * Format: date-time
+             */
+            target_at: string;
+            expected: components["schemas"]["FollowerRange"];
+            /** Actual */
+            actual: number;
+            /** Percentile */
+            percentile: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "above" | "as_expected" | "below";
+        };
+        /** FollowerTiles */
+        FollowerTiles: {
+            followers: components["schemas"]["CountTile"];
+            /** Net 7D */
+            net_7d: number | null;
+            new_follows_7d: components["schemas"]["CountTile"];
+            unfollows_7d: components["schemas"]["CountTile"];
+            profile_visits_7d: components["schemas"]["CountTile"];
+            visit_to_follow_7d: components["schemas"]["CountTile"];
+            replies_7d: components["schemas"]["CountTile"];
+        };
         /** FollowersKpi */
         FollowersKpi: {
             /** Now */
@@ -989,6 +1332,38 @@ export interface components {
             change_7d: number | null;
             /** Change 28D */
             change_28d: number | null;
+        };
+        /** FollowersOut */
+        FollowersOut: {
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats: string[];
+            /** Summary */
+            summary: string;
+            tiles: components["schemas"]["FollowerTiles"];
+            /** Actual */
+            actual: components["schemas"]["ChartPoint"][];
+            forecast: components["schemas"]["FollowerForecastOut"] | null;
+            /** Annotations */
+            annotations: components["schemas"]["ChangeRowOut"][];
+            /** Funnel */
+            funnel: components["schemas"]["FunnelStep"][];
+            goal: components["schemas"]["GoalStatusOut"] | null;
+            /** Past */
+            past: components["schemas"]["FollowerScoreOut"][];
+            /** Scenarios */
+            scenarios: components["schemas"]["ScenarioOut"][];
+            /**
+             * Model Kind
+             * @enum {string}
+             */
+            model_kind: "prior_only" | "calibrated" | "none";
+            /** Intervals N */
+            intervals_n: number;
         };
         /** ForecastDetail */
         ForecastDetail: {
@@ -1081,6 +1456,155 @@ export interface components {
              */
             kind: "live" | "as_of" | "treatment_blind" | "prior_only_uncalibrated";
         };
+        /** FunnelStep */
+        FunnelStep: {
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "impressions" | "profile_visits" | "new_follows" | "unfollows" | "net";
+            /** Label */
+            label: string;
+            /** Value */
+            value: number | null;
+            /** Note */
+            note: string;
+        };
+        /**
+         * GateOut
+         * @description One release gate (MODEL §5). ``passed`` is None when it couldn't be evaluated.
+         */
+        GateOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Passed */
+            passed: boolean | null;
+            /** Value */
+            value: number | null;
+            /** Threshold */
+            threshold: string;
+            /** Detail */
+            detail: string;
+        };
+        /** GoalIn */
+        GoalIn: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "posts" | "followers";
+            /** Target */
+            target: number;
+            /** Target At */
+            target_at?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** GoalOut */
+        GoalOut: {
+            /** Id */
+            id: number;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "posts" | "followers";
+            /** Metric */
+            metric: string;
+            /** Target */
+            target: number;
+            /** Target At */
+            target_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string;
+            /** Superseded At */
+            superseded_at: string | null;
+        };
+        /**
+         * GoalPreviewOut
+         * @description Where the member would stand today against a goal they haven't saved yet.
+         */
+        GoalPreviewOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "working" | "near" | "not_working" | "no_goal";
+            /** Reason */
+            reason: string | null;
+            /** P Goal */
+            p_goal: number | null;
+            /** Median */
+            median: number | null;
+            /** Q10 */
+            q10: number | null;
+            /** Q90 */
+            q90: number | null;
+            /** Paths */
+            paths: number;
+            /** Summary */
+            summary: string;
+        };
+        /** GoalSetOut */
+        GoalSetOut: {
+            /** Saved */
+            saved: boolean;
+            /** Summary */
+            summary: string;
+            goal: components["schemas"]["GoalOut"] | null;
+        };
+        /** GoalStatusOut */
+        GoalStatusOut: {
+            goal: components["schemas"]["GoalOut"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "working" | "near" | "not_working" | "no_goal";
+            /** Reason */
+            reason: string | null;
+            /** P Goal */
+            p_goal: number | null;
+            /** P Hi */
+            p_hi: number | null;
+            /** P Lo */
+            p_lo: number | null;
+            /** Since */
+            since: string | null;
+            /** Previous Status */
+            previous_status: string | null;
+            /** Median */
+            median: number | null;
+            /** Q10 */
+            q10: number | null;
+            /** Q90 */
+            q90: number | null;
+            /** Summary */
+            summary: string;
+        };
+        /** GoalsOut */
+        GoalsOut: {
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats: string[];
+            /** Summary */
+            summary: string;
+            /** Current */
+            current: components["schemas"]["GoalStatusOut"][];
+            /** History */
+            history: components["schemas"]["GoalOut"][];
+        };
         /** GuardrailHit */
         GuardrailHit: {
             /** Rule */
@@ -1106,6 +1630,24 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /**
+         * HitRateTile
+         * @description Share of matured posts whose outcome fell inside the frozen central interval.
+         */
+        HitRateTile: {
+            /** Level */
+            level: number;
+            /** Value */
+            value: number | null;
+            /** N */
+            n: number;
+            /** Band Lo */
+            band_lo: number | null;
+            /** Band Hi */
+            band_hi: number | null;
+            /** In Band */
+            in_band: boolean | null;
+        };
         /** I48 */
         I48: {
             /** Value */
@@ -1124,6 +1666,100 @@ export interface components {
             /** N Posts */
             n_posts: number;
             expected: components["schemas"]["ExpectedRange"] | null;
+        };
+        /** ModelCardOut */
+        ModelCardOut: {
+            /** Champion */
+            champion: string;
+            /** Version */
+            version: string | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "prior_only" | "owner";
+            /** Outcome Model */
+            outcome_model: string;
+            /** Prior */
+            prior: string;
+            follower_elasticity: components["schemas"]["Elasticity"] | null;
+            /** Post Features */
+            post_features: string[];
+            /** Maturity Curve */
+            maturity_curve: string;
+            /** Challenger */
+            challenger: string;
+            /** Promotion Rule */
+            promotion_rule: string;
+            /** Last Promotion */
+            last_promotion: string | null;
+            /** Refit */
+            refit: string;
+        };
+        /** ModelHealthOut */
+        ModelHealthOut: {
+            /** As Of */
+            as_of: string | null;
+            /** Model Version */
+            model_version: string | null;
+            data_sufficiency: components["schemas"]["DataSufficiency"];
+            /** Caveats */
+            caveats: string[];
+            /** Summary */
+            summary: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "prior_only" | "owner";
+            /** Owner N */
+            owner_n: number;
+            /** Owner Terms At */
+            owner_terms_at: number;
+            hit_80: components["schemas"]["HitRateTile"];
+            hit_50: components["schemas"]["HitRateTile"];
+            skill: components["schemas"]["SkillTile"];
+            calibration: components["schemas"]["CalibrationTile"];
+            drift: components["schemas"]["DriftTile"];
+            pit: components["schemas"]["PitHistogram"];
+            /** Coverage */
+            coverage: components["schemas"]["CoverageRow"][];
+            /** Width Ratio */
+            width_ratio: number | null;
+            /** Next Check In Posts */
+            next_check_in_posts: number | null;
+            card: components["schemas"]["ModelCardOut"];
+            last_review: components["schemas"]["ReviewOut"] | null;
+            /** Reviews */
+            reviews: components["schemas"]["ReviewOut"][];
+            /** Changes */
+            changes: components["schemas"]["ChangeRowOut"][];
+            /** Monitors */
+            monitors: components["schemas"]["MonitorOut"][];
+            /** Alarms */
+            alarms: components["schemas"]["AlarmOut"][];
+        };
+        /** MonitorOut */
+        MonitorOut: {
+            /** Chart */
+            chart: string;
+            /** Label */
+            label: string;
+            /** Armed */
+            armed: boolean;
+            /** Stat */
+            stat: number | null;
+            /** Threshold */
+            threshold: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "off" | "quiet" | "alarm" | "proposal";
+            /** Detail */
+            detail: string;
+            /** Series */
+            series: components["schemas"]["ChartPoint"][];
         };
         /** NearDuplicate */
         NearDuplicate: {
@@ -1259,6 +1895,20 @@ export interface components {
             milestone: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * PitHistogram
+         * @description PIT of 48h impressions in 10 bins, last ``n`` originals and quotes. Flat means calibrated.
+         */
+        PitHistogram: {
+            /** Counts */
+            counts: number[];
+            /** N */
+            n: number;
+            /** Band Lo */
+            band_lo: number | null;
+            /** Band Hi */
+            band_hi: number | null;
         };
         /**
          * PlanIn
@@ -1565,6 +2215,33 @@ export interface components {
             /** Slots */
             slots: components["schemas"]["SlotRowOut"][];
         };
+        /** ReviewOut */
+        ReviewOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Run Id */
+            run_id: number;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "promoted" | "held" | "not_eligible" | "kept";
+            /** Reason */
+            reason: string;
+            /** Candidate */
+            candidate: string;
+            /** Champion Before */
+            champion_before: string;
+            /** Champion After */
+            champion_after: string;
+            /** Owner N */
+            owner_n: number;
+            /** Gates */
+            gates: components["schemas"]["GateOut"][];
+        };
         /** RunFailure */
         RunFailure: {
             /** Run Id */
@@ -1644,6 +2321,17 @@ export interface components {
                 [key: string]: string;
             };
             failure: components["schemas"]["RunFailure"] | null;
+        };
+        /** ScenarioOut */
+        ScenarioOut: {
+            /** Label */
+            label: string;
+            /** Posts Per Day */
+            posts_per_day: number;
+            /** Q50 30D */
+            q50_30d: number;
+            /** P Goal */
+            p_goal: number | null;
         };
         /** ScheduleResponse */
         ScheduleResponse: {
@@ -1764,6 +2452,22 @@ export interface components {
             spent_usd: number;
             /** Cap Usd */
             cap_usd: number;
+        };
+        /**
+         * SkillTile
+         * @description Log-CRPS skill against the trailing-median baseline, week-block bootstrap 90% interval.
+         */
+        SkillTile: {
+            /** Value */
+            value: number | null;
+            /** Ci90 Lo */
+            ci90_lo: number | null;
+            /** Ci90 Hi */
+            ci90_hi: number | null;
+            /** Passed */
+            passed: boolean | null;
+            /** N */
+            n: number;
         };
         /** SlotOut */
         SlotOut: {
@@ -2655,6 +3359,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NextPostsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_api_model_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelHealthOut"];
+                };
+            };
+        };
+    };
+    ack_alarm_api_alarms__alarm_id__ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alarm_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AckIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    followers_api_followers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowersOut"];
+                };
+            };
+        };
+    };
+    goals_list_api_goals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalsOut"];
+                };
+            };
+        };
+    };
+    set_goal_api_goals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalSetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_goal_api_goals_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalPreviewOut"];
                 };
             };
             /** @description Validation Error */

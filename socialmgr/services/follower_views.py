@@ -348,3 +348,32 @@ def followers_view(session: Session, settings: Settings) -> h.FollowersOut:
         model_kind=kind,
         intervals_n=len(intervals),
     )
+
+
+def set_goal(
+    session: Session, settings: Settings, body: h.GoalIn, created_by: str, now: datetime
+) -> h.GoalSetOut:
+    try:
+        g = goals.set_goal(
+            session,
+            settings,
+            goals.GoalRequest(scope=body.scope, target=body.target, target_at=body.target_at, note=body.note),
+            created_by=created_by,
+            now=now,
+        )
+    except goals.GoalError as exc:
+        return h.GoalSetOut(saved=False, summary=str(exc), goal=None)
+    session.commit()
+    return h.GoalSetOut(
+        saved=True,
+        summary=_status_summary(g, "", None).replace("No status yet against", "Goal saved:")
+        + " A new period starts now; the next run computes its status.",
+        goal=goal_out(g),
+    )
+
+
+def goal_preview(session: Session, settings: Settings, body: h.GoalIn, now: datetime) -> h.GoalPreviewOut:
+    """Where the member would stand today; filled in by the follower model (see followers step)."""
+    from socialmgr.services import follower_step
+
+    return follower_step.preview(session, settings, body, now)

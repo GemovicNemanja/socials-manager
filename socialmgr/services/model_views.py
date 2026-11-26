@@ -316,3 +316,20 @@ def model_health(session: Session, settings: Settings) -> h.ModelHealthOut:
         monitors=monitors,
         alarms=[alarm_out(a) for a in alarms],
     )
+
+
+def acknowledge(
+    session: Session, settings: Settings, alarm_id: int, note: str | None, by: str, now: datetime
+) -> h.AckOut:
+    from socialmgr.services import alarms
+
+    try:
+        a = alarms.acknowledge(session, settings.workspace_id, alarm_id, by, note, now)
+    except alarms.AlarmError as exc:
+        return h.AckOut(acknowledged=False, summary=str(exc), alarm=None)
+    session.commit()
+    return h.AckOut(
+        acknowledged=True,
+        summary=f"alarm:{a.id} acknowledged. Charts, intervals and the model are unchanged.",
+        alarm=alarm_out(a),
+    )
