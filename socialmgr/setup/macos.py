@@ -30,7 +30,8 @@ def tool_path(extra: list[str] | None = None) -> str:
         found = shutil.which(tool)
         if found:
             dirs.append(str(Path(found).parent))
-    dirs += [str(Path.home() / ".local" / "bin"), *(extra or []), *_STANDARD_PATH]
+    private_node = Path.home() / ".local" / "share" / "socialmgr" / "node" / "bin"  # install.sh's
+    dirs += [str(Path.home() / ".local" / "bin"), str(private_node), *(extra or []), *_STANDARD_PATH]
     return ":".join(dict.fromkeys(dirs))
 
 

@@ -69,6 +69,8 @@ class RunConfig(BaseModel):
     # Before that: the newest backup of every month is kept for good (frozen forecasts and
     # assignments can't be recreated). False turns the monthly tier off.
     backup_keep_monthly_forever: bool = True
+    # Before each scheduled run, fast-forward the install to the latest main (setup.update).
+    auto_update: bool = True
 
 
 class JournalConfig(BaseModel):
