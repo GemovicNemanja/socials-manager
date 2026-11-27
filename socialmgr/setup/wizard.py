@@ -4,6 +4,8 @@ Every step checks what is already done and keeps it, so running the installer ag
 member updates (``--reconfigure`` asks every question again).
 """
 
+import base64
+import binascii
 import os
 import re
 import subprocess
@@ -72,11 +74,35 @@ def check_tz(value: str) -> str:
     return value.strip()
 
 
+WRONG_KEY = (
+    "That's a different key, not the OAuth 2.0 Client ID. In the developer portal open your app's "
+    "Keys and tokens tab and copy the Client ID under OAuth 2.0 Client ID and Client Secret "
+    "(about 34 characters). Not the API key, the Client Secret, the Bearer Token or an access token."
+)
+
+
 def check_client_id(value: str) -> str:
+    """X's OAuth 2.0 Client IDs are base64 of ``<id>:1:ci`` (about 34 characters). The other keys on
+    the same page (API key and secret, Client Secret, Bearer Token, access tokens) are not, and X
+    rejects the sign-in ("You weren't able to give access to the App") when one is used instead."""
     value = value.strip()
     if not _CLIENT_ID.match(value):
-        raise ValueError("That doesn't look like an OAuth 2.0 Client ID (a long run of letters and digits).")
+        raise ValueError(WRONG_KEY)
+    try:
+        decoded = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(WRONG_KEY) from exc
+    if not decoded.endswith(b":ci"):
+        raise ValueError(WRONG_KEY)
     return value
+
+
+def _is_client_id(value: str) -> bool:
+    try:
+        check_client_id(value)
+    except ValueError:
+        return False
+    return True
 
 
 def parse_time(value: str) -> macos.DailyRun:
@@ -185,11 +211,12 @@ def _x_app(opts: Options, env: dict[str, str]) -> dict[str, str]:
     kept = env.get("SOCIALMGR_X__CLIENT_ID", "")
     if opts.client_id:
         client_id = check_client_id(opts.client_id)
-    elif kept and not opts.reconfigure:
-        client_id = check_client_id(kept)
+    elif kept and not opts.reconfigure and _is_client_id(kept):
         _ok("Client ID already set")
-        return {"SOCIALMGR_X__CLIENT_ID": client_id}
+        return {"SOCIALMGR_X__CLIENT_ID": kept.strip()}
     else:
+        if kept and not _is_client_id(kept):
+            _warn("The saved Client ID is a different key, so X refuses the sign-in. Enter the right one.")
         _say(
             "  Social Manager reads your posts through your own X developer app. Create it once:\n"
             "    1. In the X developer portal, create a project and an app.\n"
@@ -197,7 +224,8 @@ def _x_app(opts: Options, env: dict[str, str]) -> dict[str, str]:
             "       permissions Read.\n"
             "    3. Callback URI: http://127.0.0.1:8765/auth/x/callback\n"
             "       Website URL: your X profile (https://x.com/<your handle>) is fine.\n"
-            "    4. Copy the OAuth 2.0 Client ID (you don't need the secret, API key or bearer token).\n"
+            "    4. On the Keys and tokens tab, copy the Client ID under “OAuth 2.0 Client ID and Client\n"
+            "       Secret” (about 34 characters). Not the API key, Client Secret or Bearer Token.\n"
             "    5. Under Billing, buy a few dollars of credit and set a spending limit. Daily runs\n"
             "       cost about $5 a month; Social Manager also stops at its own monthly cap."
         )
