@@ -196,3 +196,7 @@ scripts/check.sh             # the same plus the Playwright end-to-end tests; ru
 The end-to-end tests pin the handle, time zone, labeller and data folders but not the provider. If your `.env` sets `SOCIALMGR_PLUGINS__PROVIDERS=["x"]`, override it for the check: `SOCIALMGR_PLUGINS__PROVIDERS='["fake_owner"]' scripts/check.sh`.
 
 `CLAUDE.md` has the definition of done and the conventions. After an API change: `uv run socialmgr openapi`, then `cd web && pnpm gen:api`.
+
+## License
+
+[MIT](LICENSE). Use it, change it, build on it; keep the copyright notice.
