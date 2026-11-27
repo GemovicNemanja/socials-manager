@@ -362,16 +362,18 @@ def _claude(opts: Options, uv: str) -> None:
     _ok(f"MCP server `{name}` registered for every Claude Code session")
 
 
-def _mac(opts: Options) -> None:
+def _mac(opts: Options) -> bool:
+    """The app and the daily run. True when the daily job was (re)loaded: launchd then starts it at
+    once, and it catches up a missed run (on a fresh install: the first collection)."""
     if sys.platform != "darwin":
         _warn("Not a Mac: skipping the app and the daily run.")
-        return
+        return False
     if opts.app:
         icon = opts.repo / "scripts" / "assets" / "AppIcon.icns"
         app = macos.write_app(opts.repo, opts.applications, icon, names=opts.names)
         _ok(f"App: {app} (Spotlight: “{opts.names.app_name}”)")
     if not opts.schedule:
-        return
+        return False
     current = macos.scheduled(opts.launch_agents, names=opts.names)
     if opts.run_at:
         at = parse_time(opts.run_at)
@@ -381,7 +383,11 @@ def _mac(opts: Options) -> None:
         _say("  A daily run collects your posts and followers, scores forecasts and backs up.")
         at = parse_time(_ask(opts, "Run it every day at (24h, your time)", "09:00", parse_time_text))
     macos.schedule(opts.repo, at, opts.launch_agents, load=opts.load_agent, names=opts.names)
-    _ok(f"Daily run at {at.hour:02d}:{at.minute:02d} (runs on wake if the Mac was asleep)")
+    _ok(
+        f"Daily run at {at.hour:02d}:{at.minute:02d}; if the Mac was asleep, off or logged out then, "
+        "it runs as soon as you're back"
+    )
+    return opts.load_agent
 
 
 def parse_time_text(value: str) -> str:
@@ -444,10 +450,12 @@ def run_setup(opts: Options) -> int:
     _claude(opts, uv)
 
     _step(6, total, f"The {opts.names.app_name} app and the daily run")
-    _mac(opts)
+    in_background = _mac(opts)
 
     first = connected and opts.first_run and not _has_runs()
-    if first and _confirm(opts, "Run the first collection now (about $0.05-0.20 of X credit)?"):
+    if first and in_background:
+        _ok("The first collection is running in the background now (a minute or two).")
+    elif first and _confirm(opts, "Run the first collection now (about $0.05-0.20 of X credit)?"):
         subprocess.run([sys.executable, "-m", "socialmgr", "run"], check=False)
 
     typer.secho(f"\n{opts.names.app_name} is set up.", bold=True, fg=typer.colors.GREEN)

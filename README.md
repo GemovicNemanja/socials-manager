@@ -33,7 +33,7 @@ It walks you through everything, in about 10 minutes (most of it is creating you
 - asks for your X handle, time zone and whether you have Premium; shows how to create your X developer app (it opens the portal) and asks for its Client ID; asks where backups should go (Proton Drive, iCloud Drive or other synced folders it finds, or this Mac only);
 - connects your X account in the browser, registers the `socialmgr` MCP server with Claude Code for every folder, and signs you in to Claude Code if needed;
 - creates the **Social Manager** app in `~/Applications` (Spotlight: "Social Manager"): opening it starts the server if it isn't running and opens the dashboard;
-- schedules the **daily run** at a time you choose (09:00 by default; a run missed while the Mac sleeps happens on wake) and offers the first run.
+- schedules the **daily run** at a time you choose (09:00 by default; missed while the Mac sleeps, is off or logged out, it runs when you're back) and starts the first collection.
 
 **Updating:** paste the same command again. It pulls the latest code, rebuilds, restarts the server if it was running, and keeps every answer. Running `scripts/install.sh` from the folder does the same.
 
@@ -76,7 +76,7 @@ The installer runs these steps; use them to see or redo one.
 
 ### The daily run
 
-The installer schedules it (a launchd job on your Mac). To see, move or remove it:
+The installer schedules it (a launchd job on your Mac), and it survives restarts. If the Mac is asleep at that time, the run starts when it wakes; if it was off or logged out, the run starts at your next login. Either way it waits for the internet first and never runs twice for the same day's slot. If a run fails (X needs reconnecting, say), a notification tells you. To see, move or remove it:
 
 ```sh
 uv run socialmgr schedule              # when it runs; its log is data/logs/daily-run.log

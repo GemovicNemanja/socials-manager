@@ -146,7 +146,8 @@ def test_daily_run_agent(tmp_path: Path) -> None:
     with path.open("rb") as f:
         plist = plistlib.load(f)
     assert plist["Label"] == LIVE.run_label
-    assert plist["ProgramArguments"] == [str(repo / ".venv/bin/socialmgr"), "run"]
+    assert plist["ProgramArguments"] == [str(repo / ".venv/bin/socialmgr"), "run", "--scheduled", "07:30"]
+    assert plist["RunAtLoad"] is True  # at login: catches up a day the Mac was off at 07:30
     assert plist["WorkingDirectory"] == str(repo)
     assert plist["StartCalendarInterval"] == {"Hour": 7, "Minute": 30}
     assert "/usr/bin" in plist["EnvironmentVariables"]["PATH"]
@@ -566,3 +567,95 @@ def test_instance_setup_warns_that_connecting_signs_out_the_main_install(
     warnings.clear()
     assert not wizard._connect(wizard.Options(repo=tmp_path), "@tester_1")  # the main install: no warning
     assert not any("signs your main install out" in w for w in warnings)
+
+
+# ---------------------------------------------------------------- catching up missed runs
+
+
+def test_last_slot() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from socialmgr.setup.catchup import last_slot
+
+    tz = timezone(timedelta(hours=1))
+    at = macos.DailyRun(9, 0)
+    assert last_slot(at, datetime(2026, 11, 27, 11, 5, tzinfo=tz)) == datetime(2026, 11, 27, 9, 0, tzinfo=tz)
+    assert last_slot(at, datetime(2026, 11, 27, 8, 59, tzinfo=tz)) == datetime(2026, 11, 26, 9, 0, tzinfo=tz)
+    assert last_slot(at, datetime(2026, 11, 27, 9, 0, tzinfo=tz)) == datetime(2026, 11, 27, 9, 0, tzinfo=tz)
+
+
+def test_wait_for_network_retries_until_x_answers() -> None:
+    from socialmgr.setup.catchup import wait_for_network
+
+    now = [0.0]
+    attempts: list[object] = []
+
+    def connect(addr: object, timeout: float) -> object:
+        attempts.append(addr)
+        if len(attempts) < 3:
+            raise OSError("no route")
+        return None
+
+    def sleep(s: float) -> None:
+        now[0] += s
+
+    assert wait_for_network(timeout_s=600, every_s=15, connect=connect, sleep=sleep, clock=lambda: now[0])
+    assert len(attempts) == 3 and now[0] == 30
+    now[0] = 0.0
+
+    def never(addr: object, timeout: float) -> object:
+        raise OSError("offline")
+
+    assert not wait_for_network(timeout_s=60, every_s=15, connect=never, sleep=sleep, clock=lambda: now[0])
+
+
+def _add_run(settings: Settings, finished_at: object) -> None:
+    from datetime import UTC, datetime
+
+    from socialmgr.db import migrate
+    from socialmgr.db.models import Run
+    from socialmgr.db.session import make_engine, session_factory
+
+    engine = make_engine(settings)
+    migrate.upgrade(engine)
+    with session_factory(engine)() as session:
+        t = datetime.now(UTC)
+        session.add(Run(trigger="cli", started_at=t, cutoff_at=t, finished_at=finished_at, status="finished"))
+        session.commit()
+
+
+def test_scheduled_run_skips_when_it_already_ran_and_catches_up_otherwise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from socialmgr.services import runs
+    from socialmgr.setup import catchup
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SOCIALMGR_DATA_DIR", str(tmp_path / "data"))
+    started: list[str] = []
+
+    def fake_run_now(*_a: object, trigger: str = "cli", **_k: object) -> list[object]:
+        started.append(trigger)
+        return []
+
+    monkeypatch.setattr(runs, "run_now", fake_run_now)
+    monkeypatch.setattr(catchup, "wait_for_network", lambda: True)
+    hour_ago = datetime.now().astimezone() - timedelta(hours=1)
+    slot = f"{hour_ago.hour:02d}:{hour_ago.minute:02d}"  # the most recent slot was an hour ago
+
+    # A run finished a day ago: the slot was missed (Mac off), so the login start catches up.
+    _add_run(Settings(), datetime.now(UTC) - timedelta(days=1))
+    result = CliRunner().invoke(app, ["run", "--scheduled", slot])
+    assert result.exit_code == 0, result.output
+    assert started == ["schedule"]
+
+    # A run finished just now: the next login (or wake) start does nothing.
+    _add_run(Settings(), datetime.now(UTC))
+    again = CliRunner().invoke(app, ["run", "--scheduled", slot])
+    assert again.exit_code == 0 and "nothing to catch up" in again.output and started == ["schedule"]
+
+    # By hand, `socialmgr run` always runs.
+    CliRunner().invoke(app, ["run"])
+    assert started == ["schedule", "cli"]
