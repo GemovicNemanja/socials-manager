@@ -5,6 +5,7 @@ import plistlib
 import shlex
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -156,3 +157,18 @@ def remove_app(applications: Path | None = None, names: Names = LIVE) -> bool:
         shutil.rmtree(app)
         return True
     return False
+
+
+def notify(
+    title: str, message: str, run: Callable[..., subprocess.CompletedProcess[str]] | None = None
+) -> bool:
+    """A macOS notification (Notification Center). False where there's no osascript (not a Mac)."""
+    if run is None and (os.environ.get("PYTEST_CURRENT_TEST") or not Path("/usr/bin/osascript").exists()):
+        return False  # never pop real notifications from the test suite
+
+    def quote(text: str) -> str:
+        return '"' + text.replace("\\", "\\\\").replace('"', '\\"')[:400] + '"'
+
+    script = f"display notification {quote(message)} with title {quote(title)}"
+    done = (run or subprocess.run)(["/usr/bin/osascript", "-e", script], capture_output=True, text=True)
+    return done.returncode == 0

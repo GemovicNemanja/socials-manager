@@ -298,6 +298,11 @@ def _connect(opts: Options, handle: str) -> bool:
         opts.todo.append("Connect your X account: run the installer again.")
         _warn("Skipped (--no-connect).")
         return False
+    if opts.names.instance:
+        _warn(
+            "X keeps one sign-in per account per X app: connecting this extra install signs your main "
+            "install out. Afterwards, reconnect the main one (`socialmgr connect` in its folder)."
+        )
     if not _confirm(opts, f"Open X in your browser to connect {handle} now?"):
         opts.todo.append("Connect your X account: run the installer again.")
         return False
