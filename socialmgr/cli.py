@@ -189,6 +189,7 @@ def run(
             "and wait for the network first."
         ),
     ] = None,
+    no_update: Annotated[bool, typer.Option("--no-update", hidden=True)] = False,
 ) -> None:
     """Collect, label, forecast, score and write the briefing (resumes an interrupted run)."""
     from socialmgr.modelling.regimes import github_fetcher
@@ -209,6 +210,8 @@ def run(
                 return
             if not catchup.wait_for_network():
                 typer.echo("No connection to X after 10 minutes; trying anyway.", err=True)
+            elif settings.run.auto_update and not no_update:
+                _auto_update(settings, scheduled)  # re-executes on the new version when it updated
         try:
             outcomes = runs.run_now(
                 session,
@@ -231,6 +234,24 @@ def run(
         latest = briefing.latest(session, settings.workspace_id)
         if latest is not None:
             typer.echo(latest.summary)
+
+
+def _auto_update(settings: Settings, scheduled: str) -> None:
+    import os
+
+    from socialmgr.setup import macos, server, update
+    from socialmgr.setup.wizard import APP_ROOT
+
+    result = update.auto_update(APP_ROOT)
+    typer.echo(f"Update: {result.summary}")
+    if result.status in ("skipped", "failed") and "GitHub" not in result.detail:
+        macos.notify("Social Manager couldn't update", result.detail)
+    if result.status != "updated":
+        return
+    if server.stop(settings):  # the dashboard runs the old code: restart it on the new one
+        server.start(settings)
+    exe = APP_ROOT / ".venv" / "bin" / "socialmgr"
+    os.execv(exe, [str(exe), "run", "--scheduled", scheduled, "--no-update"])
 
 
 @app.command()

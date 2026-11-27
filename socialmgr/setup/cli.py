@@ -129,3 +129,17 @@ def register(app: typer.Typer) -> None:
         if claude and claude_code.unregister_mcp(claude, repo, names=names):
             typer.echo(f"Removed the MCP server `{names.mcp_name}`.")
         typer.echo(f"Your data and settings are still in {repo}. Delete that folder to remove everything.")
+
+    @app.command("update")
+    def update_cmd() -> None:
+        """Update this install to the latest main now (the daily run also does this on its own)."""
+        from socialmgr.setup import update
+
+        settings = Settings()
+        result = update.auto_update(wizard.APP_ROOT)
+        typer.echo(f"Update: {result.summary}")
+        if result.status == "updated" and server.stop(settings):
+            server.start(settings)
+            typer.echo("Restarted the dashboard on the new version.")
+        if result.status in ("skipped", "failed"):
+            raise typer.Exit(1)

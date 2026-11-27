@@ -35,7 +35,7 @@ It walks you through everything, in about 10 minutes (most of it is creating you
 - creates the **Social Manager** app in `~/Applications` (Spotlight: "Social Manager"): opening it starts the server if it isn't running and opens the dashboard;
 - schedules the **daily run** at a time you choose (09:00 by default; missed while the Mac sleeps, is off or logged out, it runs when you're back) and starts the first collection.
 
-**Updating:** paste the same command again. It pulls the latest code, rebuilds, restarts the server if it was running, and keeps every answer. Running `scripts/install.sh` from the folder does the same.
+**Updating happens on its own.** Before each daily run, the install fast-forwards to the latest `main` (which only moves after CI passes), reinstalls, rebuilds the web app if it changed, restarts the dashboard if it was open, and runs on the new version. It leaves an install alone if its files were edited, it's on another branch, or its history diverged, and tells you in a notification; a failed update returns to the previous version and the run still happens. Update right away with `.venv/bin/socialmgr update` in the folder, turn it off with `SOCIALMGR_RUN__AUTO_UPDATE=false` in `.env`, or paste the install command again (which also re-checks every setting). New MCP tools appear in Claude Code sessions started after the update.
 
 The command runs [`scripts/bootstrap.sh`](scripts/bootstrap.sh) from this repository; read it first if you like. Options after `--` go to the installer, for example `... bootstrap.sh)" -- --reconfigure`.
 

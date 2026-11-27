@@ -659,3 +659,148 @@ def test_scheduled_run_skips_when_it_already_ran_and_catches_up_otherwise(
     # By hand, `socialmgr run` always runs.
     CliRunner().invoke(app, ["run"])
     assert started == ["schedule", "cli"]
+
+
+# ---------------------------------------------------------------- auto-update
+
+
+def _git(cwd: Path, *args: str) -> str:
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com"}  # fmt: skip
+    done = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env=env, check=True)
+    return done.stdout.strip()
+
+
+def _commit(repo: Path, path: str, text: str) -> str:
+    (repo / path).parent.mkdir(parents=True, exist_ok=True)
+    (repo / path).write_text(text)
+    _git(repo, "add", path)
+    _git(repo, "commit", "-q", "-m", f"change {path}")
+    return _git(repo, "rev-parse", "HEAD")
+
+
+@pytest.fixture
+def remote_and_install(tmp_path: Path) -> tuple[Path, Path]:
+    """A 'GitHub' repo (main) and a member's install cloned from it."""
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    _git(upstream, "init", "-q", "-b", "main")
+    _commit(upstream, "socialmgr/app.py", "v1")
+    _commit(upstream, "web/src/main.ts", "v1")
+    install = tmp_path / "install"
+    _git(tmp_path, "clone", "-q", str(upstream), str(install))
+    (install / "data").mkdir()
+    (install / "data" / "socialmgr.sqlite3").write_text("member data")  # untracked, like the real one
+    return upstream, install
+
+
+class Tools:
+    """Records uv/pnpm calls; `fail` names a step that fails once."""
+
+    def __init__(self, fail: str = "") -> None:
+        self.calls: list[str] = []
+        self.fail = fail
+
+    def __call__(self, cmd: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+        step = "build" if "build" in cmd else "sync" if "sync" in cmd else "pnpm-install"
+        self.calls.append(f"{step}@{(cwd / 'socialmgr/app.py').read_text() if step == 'sync' else cwd.name}")
+        code = 1 if self.fail and self.fail == step else 0
+        if code:
+            self.fail = ""  # the new version fails; the old one builds again
+        return subprocess.CompletedProcess(list(cmd), code, "", "boom" if code else "")
+
+
+def test_auto_update_fast_forwards_and_rebuilds_only_what_changed(
+    remote_and_install: tuple[Path, Path],
+) -> None:
+    from socialmgr.setup import update
+
+    upstream, install = remote_and_install
+    tools = Tools()
+    assert update.auto_update(install, tools).status == "current" and tools.calls == []
+
+    new = _commit(upstream, "socialmgr/app.py", "v2")  # backend only
+    result = update.auto_update(install, tools)
+    assert (result.status, result.new) == ("updated", new)
+    assert (install / "socialmgr/app.py").read_text() == "v2" and tools.calls == ["sync@v2"]
+    assert (install / "data/socialmgr.sqlite3").read_text() == "member data"
+
+    tools.calls.clear()
+    _commit(upstream, "web/src/main.ts", "v2")  # the web app changed: rebuild it too
+    assert update.auto_update(install, tools).status == "updated"
+    assert tools.calls == ["sync@v2", "pnpm-install@web", "build@web"]
+
+
+def test_auto_update_rolls_back_when_the_new_version_fails_to_build(
+    remote_and_install: tuple[Path, Path],
+) -> None:
+    from socialmgr.setup import update
+
+    upstream, install = remote_and_install
+    old = _git(install, "rev-parse", "HEAD")
+    _commit(upstream, "socialmgr/app.py", "v2")
+    _commit(upstream, "web/src/main.ts", "v2")
+    tools = Tools(fail="build")
+    result = update.auto_update(install, tools)
+    assert result.status == "failed" and "kept the previous version" in result.detail
+    assert _git(install, "rev-parse", "HEAD") == old and (install / "socialmgr/app.py").read_text() == "v1"
+    assert tools.calls[:3] == ["sync@v2", "pnpm-install@web", "build@web"]
+    assert tools.calls[3] == "sync@v1"  # the old version reinstalled
+    assert (install / "data/socialmgr.sqlite3").read_text() == "member data"
+
+
+@pytest.mark.parametrize("situation", ["edited", "branch", "diverged"])
+def test_auto_update_leaves_a_customised_install_alone(
+    remote_and_install: tuple[Path, Path], situation: str
+) -> None:
+    from socialmgr.setup import update
+
+    upstream, install = remote_and_install
+    _commit(upstream, "socialmgr/app.py", "v2")
+    if situation == "edited":
+        (install / "socialmgr/app.py").write_text("my local change")
+    elif situation == "branch":
+        _git(install, "checkout", "-q", "-b", "experiment")
+    else:
+        _commit(install, "socialmgr/other.py", "mine")
+    before = _git(install, "rev-parse", "HEAD")
+    tools = Tools()
+    result = update.auto_update(install, tools)
+    assert result.status == "skipped" and tools.calls == []
+    assert _git(install, "rev-parse", "HEAD") == before
+    if situation == "edited":
+        assert (install / "socialmgr/app.py").read_text() == "my local change"
+
+
+def test_scheduled_run_updates_first_and_notifies_when_it_cannot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from socialmgr.services import runs
+    from socialmgr.setup import catchup, update
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SOCIALMGR_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(catchup, "wait_for_network", lambda: True)
+    monkeypatch.setattr(runs, "run_now", lambda *_a, **_k: [])
+    sent: list[str] = []
+    monkeypatch.setattr(macos, "notify", lambda title, message, run=None: sent.append(message) or True)
+    monkeypatch.setattr(
+        update,
+        "auto_update",
+        lambda repo, *a, **k: update.UpdateResult("skipped", detail="files were edited"),
+    )
+    result = CliRunner().invoke(app, ["run", "--scheduled", "00:00"])
+    assert result.exit_code == 0, result.output
+    assert "Update: skipped files were edited" in result.output and sent == ["files were edited"]
+
+    sent.clear()  # offline: no notification (the run itself will say if X is unreachable)
+    monkeypatch.setattr(
+        update,
+        "auto_update",
+        lambda repo, *a, **k: update.UpdateResult("skipped", detail="couldn't reach GitHub"),
+    )
+    assert CliRunner().invoke(app, ["run", "--scheduled", "00:00"]).exit_code == 0 and sent == []
+
+    monkeypatch.setenv("SOCIALMGR_RUN__AUTO_UPDATE", "false")  # turned off: never called
+    monkeypatch.setattr(update, "auto_update", lambda *a, **k: pytest.fail("updated while turned off"))
+    assert CliRunner().invoke(app, ["run", "--scheduled", "00:00"]).exit_code == 0
