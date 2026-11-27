@@ -10,7 +10,7 @@
 - [FC] `forecasting-calibration-literature.md`
 - [EXP] `experiment-design-literature.md`
 - [TAPI] `twitterapi-io.md`
-- [REV] `REVIEW.md`
+- [REV] the review of the first plan (not published)
 
 **Markers.**
 - **[J]** marks a judgement call.

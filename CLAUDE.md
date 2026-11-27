@@ -18,4 +18,4 @@ Validate each part as it is finished, not at the end of a milestone. A change is
 - Forecasts are frozen and append-only; never edit or delete rows in `metric_snapshots`, `forecasts`, `forecast_draws`, `scores`.
 - All timestamps are timezone-aware UTC.
 - The web app reads API types generated from `openapi.json` (`uv run socialmgr openapi`, then `pnpm gen:api`); never hand-edit `web/src/api/types.ts`.
-- Git: remote `origin` uses the personal account (SSH alias `github.com-personal`); commit email `gemovic.nemanja@gmail.com`.
+- Git: never commit `.env`, `data/` or anything with a token or Client ID in it; this repository is public.

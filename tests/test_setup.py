@@ -27,6 +27,18 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(key)
 
 
+@pytest.fixture(autouse=True)
+def no_real_claude_or_launchd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail any test that would run the real `claude` or `launchctl`: an early version of these tests
+    re-registered the developer's own MCP server. Tests that need them pass fakes."""
+
+    def refuse(*args: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError(f"a test tried to run a real command: {args}")
+
+    monkeypatch.setattr(claude_code, "_run", refuse)
+    monkeypatch.setattr(macos, "_launchctl", refuse)
+
+
 # ---------------------------------------------------------------- .env
 
 
@@ -327,6 +339,19 @@ def test_launch_starts_once_and_stop_stops(tmp_path: Path, monkeypatch: pytest.M
 
 
 # ---------------------------------------------------------------- the shell scripts
+
+
+def test_guard_blocks_real_claude_commands(tmp_path: Path) -> None:
+    with pytest.raises(AssertionError, match="real command"):
+        claude_code.register_mcp("claude", tmp_path, "/bin/uv")
+    with pytest.raises(AssertionError, match="real command"):
+        macos.schedule(tmp_path, macos.DailyRun(9, 0), tmp_path / "LaunchAgents")
+
+
+def test_bootstrap_needs_no_github_account() -> None:
+    text = (ROOT / "scripts" / "bootstrap.sh").read_text()
+    assert "https://github.com/GemovicNemanja/socials-manager.git" in text
+    assert "gh auth" not in text and "gist" not in text
 
 
 @pytest.mark.parametrize("script", ["install.sh", "bootstrap.sh"])
