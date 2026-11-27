@@ -39,6 +39,20 @@ It walks you through everything, in about 10 minutes (most of it is creating you
 
 The command runs [`scripts/bootstrap.sh`](scripts/bootstrap.sh) from this repository; read it first if you like. Options after `--` go to the installer, for example `... bootstrap.sh)" -- --reconfigure`.
 
+### Trying it next to your own install
+
+To test the installer on a Mac that already runs Social Manager (before sharing it, say), give it an instance name:
+
+```sh
+SOCIALMGR_INSTANCE=test /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/GemovicNemanja/socials-manager/main/scripts/bootstrap.sh)"
+```
+
+It installs into `~/socials-manager-test` with its own app ("Social Manager (test)"), daily run, MCP server (`socialmgr-test`), dashboard port (8766) and backup folder, and never changes the main install. Connecting X needs port 8765 for a moment (the callback registered in your X app), so it offers to pause your running Social Manager and restarts it right after. To remove it:
+
+```sh
+~/socials-manager-test/.venv/bin/socialmgr uninstall && rm -rf ~/socials-manager-test
+```
+
 ### By hand
 
 The installer runs these steps; use them to see or redo one.

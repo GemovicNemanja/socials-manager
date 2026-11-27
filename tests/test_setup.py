@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 from socialmgr.cli import app
 from socialmgr.core.config import Settings
 from socialmgr.setup import claude_code, envfile, macos, server, wizard
+from socialmgr.setup.names import LIVE, Names, check_instance
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -136,7 +137,7 @@ def test_daily_run_agent(tmp_path: Path) -> None:
     path = macos.schedule(repo, macos.DailyRun(7, 30), agents, load=False)
     with path.open("rb") as f:
         plist = plistlib.load(f)
-    assert plist["Label"] == macos.RUN_LABEL
+    assert plist["Label"] == LIVE.run_label
     assert plist["ProgramArguments"] == [str(repo / ".venv/bin/socialmgr"), "run"]
     assert plist["WorkingDirectory"] == str(repo)
     assert plist["StartCalendarInterval"] == {"Hour": 7, "Minute": 30}
@@ -210,7 +211,7 @@ def mac(monkeypatch: pytest.MonkeyPatch) -> FakeClaude:
     monkeypatch.setattr(claude_code, "find", lambda: "claude")
     monkeypatch.setattr(claude_code, "_run", fake)
     monkeypatch.setattr(wizard.webbrowser, "open", lambda *_a, **_k: pytest.fail("opened a browser"))
-    monkeypatch.setattr(wizard, "backup_candidates", lambda home=None: [])
+    monkeypatch.setattr(wizard, "backup_candidates", lambda home=None, folder="": [])
     return fake
 
 
@@ -363,3 +364,134 @@ def test_scripts_parse_and_pass_shellcheck(script: str) -> None:
         pytest.skip("shellcheck not installed")
     done = subprocess.run(["shellcheck", str(path)], capture_output=True, text=True)
     assert done.returncode == 0, done.stdout
+
+
+# ---------------------------------------------------------------- a named side-by-side instance
+
+
+def test_instance_names_never_collide_with_the_main_install() -> None:
+    test = Names("test")
+    assert (LIVE.app_name, LIVE.run_label, LIVE.mcp_name, LIVE.default_port) == (
+        "Social Manager", "local.socialmgr.daily-run", "socialmgr", 8765,
+    )  # fmt: skip
+    assert (test.app_name, test.app_id, test.run_label, test.mcp_name, test.default_port) == (
+        "Social Manager (test)", "local.socialmgr.app.test", "local.socialmgr.daily-run.test",
+        "socialmgr-test", 8766,
+    )  # fmt: skip
+    assert check_instance(" test-2 ") == "test-2" and check_instance("") == ""
+    for bad in ("Test", "has space", "-x", "a" * 21):
+        with pytest.raises(ValueError):
+            check_instance(bad)
+    assert [p.name for _, p in wizard.backup_candidates(Path("/nonexistent"), "socialmgr-backups-test")] == []
+
+
+def test_setup_instance_installs_beside_the_main_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mac: FakeClaude
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    repo = _repo(tmp_path)
+    live_app = macos.write_app(tmp_path / "main", tmp_path / "Applications")  # the main install
+    macos.schedule(tmp_path / "main", macos.DailyRun(9, 0), tmp_path / "LaunchAgents", load=False)
+    runner = CliRunner()
+    args = ["--yes", "--handle", "tester_1", "--client-id", "Q2xpZW50SWRFeGFtcGxl", "--no-connect",
+            "--run-at", "10:15", *_hidden(tmp_path, repo)]  # fmt: skip
+    result = runner.invoke(app, ["setup", *args], env={"SOCIALMGR_INSTANCE": "test"})
+    assert result.exit_code == 0, result.output
+    env = envfile.read(repo / ".env")
+    assert env["SOCIALMGR_INSTANCE"] == "test" and env["SOCIALMGR_PORT"] == "8766"
+    assert (tmp_path / "Applications/Social Manager (test).app").is_dir()
+    assert macos.scheduled(tmp_path / "LaunchAgents", names=Names("test")) == macos.DailyRun(10, 15)
+    # The main install's app and daily run are untouched.
+    assert str(tmp_path / "main") in (live_app / "Contents/MacOS/social-manager").read_text()
+    assert macos.scheduled(tmp_path / "LaunchAgents") == macos.DailyRun(9, 0)
+    touched = {c[5] for c in mac.calls if c[1:3] in (["mcp", "add"], ["mcp", "remove"])}
+    assert touched == {"socialmgr-test"}  # never the main install's `socialmgr`
+    assert "socialmgr uninstall" in result.output
+    # Later runs (updates) remember the instance from .env, without the variable.
+    mac.calls.clear()
+    again = runner.invoke(app, ["setup", "--yes", "--no-connect", *_hidden(tmp_path, repo)])
+    assert again.exit_code == 0, again.output
+    assert "Instance “test”" in again.output
+    assert {c[5] for c in mac.calls if c[1:3] == ["mcp", "add"]} <= {"socialmgr-test"}
+
+
+def test_uninstall_removes_only_this_instance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(f"SOCIALMGR_INSTANCE=test\nSOCIALMGR_DATA_DIR={tmp_path / 'data'}\n")
+    test, repo = Names("test"), wizard.APP_ROOT
+    for names in (LIVE, test):
+        macos.write_app(repo, names=names)
+        macos.schedule(repo, macos.DailyRun(9, 0), load=False, names=names)
+    launchctl: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        macos, "_launchctl", lambda *a: launchctl.append(a) or subprocess.CompletedProcess(a, 0)
+    )
+    fake = FakeClaude(registered_repo=repo)
+    monkeypatch.setattr(claude_code, "find", lambda: "claude")
+    monkeypatch.setattr(claude_code, "_run", fake)
+    result = CliRunner().invoke(app, ["uninstall", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert not macos.app_path(names=test).exists() and macos.scheduled(names=test) is None
+    assert macos.app_path().exists() and macos.scheduled() is not None  # the main install stays
+    assert launchctl == [("bootout", f"gui/{os.getuid()}/local.socialmgr.daily-run.test")]
+    assert ["claude", "mcp", "remove", "--scope", "user", "socialmgr-test"] in fake.calls
+    assert "Delete that folder" in result.output
+
+
+def test_connect_pauses_a_server_on_the_callback_port_and_restarts_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mac: FakeClaude
+) -> None:
+    from types import SimpleNamespace
+
+    from socialmgr.providers.x import connect
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SOCIALMGR_DATA_DIR", str(tmp_path / "data"))
+    events: list[str] = []
+    holder = server.Holder(4242, tmp_path / "main")
+    monkeypatch.setattr(server, "port_free", lambda port, host="127.0.0.1": False)
+    monkeypatch.setattr(server, "port_holder", lambda port: holder)
+    monkeypatch.setattr(server, "pause", lambda h: events.append(f"pause {h.pid}"))
+    monkeypatch.setattr(server, "resume", lambda h: events.append(f"resume {h.pid}") or True)
+    monkeypatch.setattr(wizard, "_connected", lambda handle: False)
+
+    def fake_connect(*_a: object, **_k: object) -> object:
+        events.append("connect")
+        return SimpleNamespace(username="tester_1")
+
+    monkeypatch.setattr(connect, "run_connect", fake_connect)
+    opts = wizard.Options(repo=tmp_path, yes=True)
+    assert wizard._connect(opts, "@tester_1")
+    assert events == ["pause 4242", "connect", "resume 4242"]
+    # Declining leaves the other server alone and tells the member what to do.
+    events.clear()
+    monkeypatch.setattr(wizard, "_confirm", lambda *_a, **_k: False)
+    assert not wizard._connect(wizard.Options(repo=tmp_path), "@tester_1") and events == []
+
+
+@pytest.mark.skipif(shutil.which("lsof") is None, reason="needs lsof")
+def test_port_holder_finds_a_real_server_and_pause_resume_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    port = _free_port()
+    install = tmp_path / "other install"
+    install.mkdir()
+    (install / ".venv").symlink_to(ROOT / ".venv")
+    (install / ".env").write_text(f"SOCIALMGR_PORT={port}\nSOCIALMGR_DATA_DIR=data\n")
+    monkeypatch.chdir(install)
+    settings = Settings()
+    assert server.port_free(port)
+    server.start(settings)
+    try:
+        assert not server.port_free(port)
+        holder = server.port_holder(port)
+        assert holder is not None and holder.cwd is not None
+        assert holder.pid == int(server.pid_file(settings).read_text())
+        assert holder.cwd.resolve() == install.resolve()
+        server.pause(holder)
+        assert server.port_free(port) and not server.is_up(settings)
+        assert server.resume(holder) and server.is_up(settings)
+    finally:
+        server.stop(settings)
+    assert server.port_holder(port) is None

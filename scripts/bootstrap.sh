@@ -6,10 +6,15 @@
 # Makes sure git is available, downloads the repository into ~/socials-manager (or updates it), and
 # runs its installer. Run the same command again to update. Options after `--` go to the installer,
 # e.g. `... bootstrap.sh)" -- --reconfigure`.
+#
+# To try it next to an existing install without touching it, name an instance:
+#   SOCIALMGR_INSTANCE=test /bin/bash -c "$(curl -fsSL .../bootstrap.sh)"
+# It goes to ~/socials-manager-test with its own app, daily run, MCP server and dashboard port.
 set -euo pipefail
 
 REPO_URL="${SOCIALMGR_REPO_URL:-https://github.com/GemovicNemanja/socials-manager.git}"
-DEST="${SOCIALMGR_HOME:-$HOME/socials-manager}"
+INSTANCE="${SOCIALMGR_INSTANCE:-}"
+DEST="${SOCIALMGR_HOME:-$HOME/socials-manager${INSTANCE:+-$INSTANCE}}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 ok() { printf '  \033[32m✓\033[0m %s\n' "$*"; }
@@ -18,7 +23,7 @@ die() {
   exit 1
 }
 
-bold "Social Manager setup"
+bold "Social Manager setup${INSTANCE:+ (instance: $INSTANCE)}"
 [ "$(uname -s)" = "Darwin" ] || die "This setup is for macOS."
 
 # ------------------------------------------------------------------ git (Apple Command Line Tools)

@@ -12,11 +12,13 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 
 from socialmgr.setup import claude_code, envfile, macos, server
+from socialmgr.setup.names import LIVE, Names, check_instance
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 X_PORTAL = "https://developer.x.com/en/portal/dashboard"
@@ -46,6 +48,8 @@ class Options:
     applications: Path | None = None
     launch_agents: Path | None = None
     load_agent: bool = True
+    instance: str | None = None  # a named side-by-side install (e.g. "test"); None: as saved in .env
+    names: Names = LIVE
     done: list[str] = field(default_factory=list)
     todo: list[str] = field(default_factory=list)
 
@@ -93,7 +97,7 @@ def system_tz() -> str:
     return "UTC"
 
 
-def backup_candidates(home: Path | None = None) -> list[tuple[str, Path]]:
+def backup_candidates(home: Path | None = None, folder: str = "socialmgr-backups") -> list[tuple[str, Path]]:
     """Synced folders worth backing up into, as (label, folder) pairs."""
     home = home or Path.home()
     out: list[tuple[str, Path]] = []
@@ -101,10 +105,10 @@ def backup_candidates(home: Path | None = None) -> list[tuple[str, Path]]:
     if cloud.is_dir():
         for d in sorted(cloud.iterdir()):
             if d.is_dir() and not d.name.startswith("."):
-                out.append((d.name.split("-")[0], d / "socialmgr-backups"))
+                out.append((d.name.split("-")[0], d / folder))
     icloud = home / "Library" / "Mobile Documents" / "com~apple~CloudDocs"
     if icloud.is_dir():
-        out.append(("iCloud Drive", icloud / "socialmgr-backups"))
+        out.append(("iCloud Drive", icloud / folder))
     return out
 
 
@@ -212,7 +216,9 @@ def _backups(opts: Options, env: dict[str, str]) -> dict[str, str]:
         _ok(f"Backups go to {env['SOCIALMGR_BACKUP_DIR']}")
         return {}
     else:
-        options: list[tuple[str, Path]] = [("This Mac only", local), *backup_candidates()]
+        # A named instance never shares the main install's backup folder (pruning would mix them).
+        folder = "socialmgr-backups" + (f"-{opts.names.instance}" if opts.names.instance else "")
+        options: list[tuple[str, Path]] = [("This Mac only", local), *backup_candidates(folder=folder)]
         chosen = local
         if not opts.yes and len(options) > 1:
             _say("  Every run backs up your database. Where should backups go?")
@@ -268,8 +274,20 @@ def _connect(opts: Options, handle: str) -> bool:
         opts.todo.append("Connect your X account: run the installer again.")
         return False
     settings = Settings()
-    if server.stop(settings):
-        _say("  (Stopped the running Social Manager server: connecting needs its port.)")
+    server.stop(settings)  # this install's own background server
+    port = urlsplit(settings.x.redirect_uri).port or 8765
+    paused: server.Holder | None = None
+    if not server.port_free(port):
+        holder = server.port_holder(port)
+        where = f" from {holder.cwd}" if holder and holder.cwd else ""
+        if holder is None or not _confirm(
+            opts, f"Social Manager is running{where} on port {port}, which X needs. Pause it for a minute?"
+        ):
+            _warn(f"Port {port} is busy; X can't call back. Free it, then run the installer again.")
+            opts.todo.append("Connect your X account: run the installer again.")
+            return False
+        server.pause(holder)
+        paused = holder
     try:
         with httpx.Client(timeout=30.0) as http:
             result = run_connect(settings, session_factory(make_engine(settings)), http=http, echo=_say)
@@ -277,6 +295,13 @@ def _connect(opts: Options, handle: str) -> bool:
         _warn(str(exc))
         opts.todo.append("Connect your X account: run the installer again.")
         return False
+    finally:
+        if paused is not None:
+            _say(
+                "  Restarted the paused server."
+                if server.resume(paused)
+                else "  Reopen your Social Manager app."
+            )
     _ok(f"Connected @{result.username}")
     return True
 
@@ -296,11 +321,12 @@ def _claude(opts: Options, uv: str) -> None:
     if not opts.mcp:
         _warn("MCP registration skipped (--no-mcp).")
         return
-    if claude_code.mcp_registered(claude, opts.repo) and not opts.reconfigure:
-        _ok("MCP server `socialmgr` is registered for every Claude Code session")
+    name = opts.names.mcp_name
+    if claude_code.mcp_registered(claude, opts.repo, names=opts.names) and not opts.reconfigure:
+        _ok(f"MCP server `{name}` is registered for every Claude Code session")
         return
-    claude_code.register_mcp(claude, opts.repo, uv)
-    _ok("MCP server `socialmgr` registered for every Claude Code session")
+    claude_code.register_mcp(claude, opts.repo, uv, names=opts.names)
+    _ok(f"MCP server `{name}` registered for every Claude Code session")
 
 
 def _mac(opts: Options) -> None:
@@ -309,11 +335,11 @@ def _mac(opts: Options) -> None:
         return
     if opts.app:
         icon = opts.repo / "scripts" / "assets" / "AppIcon.icns"
-        app = macos.write_app(opts.repo, opts.applications, icon)
-        _ok(f"App: {app} (Spotlight: “Social Manager”)")
+        app = macos.write_app(opts.repo, opts.applications, icon, names=opts.names)
+        _ok(f"App: {app} (Spotlight: “{opts.names.app_name}”)")
     if not opts.schedule:
         return
-    current = macos.scheduled(opts.launch_agents)
+    current = macos.scheduled(opts.launch_agents, names=opts.names)
     if opts.run_at:
         at = parse_time(opts.run_at)
     elif current is not None and not opts.reconfigure:
@@ -321,7 +347,7 @@ def _mac(opts: Options) -> None:
     else:
         _say("  A daily run collects your posts and followers, scores forecasts and backs up.")
         at = parse_time(_ask(opts, "Run it every day at (24h, your time)", "09:00", parse_time_text))
-    macos.schedule(opts.repo, at, opts.launch_agents, load=opts.load_agent)
+    macos.schedule(opts.repo, at, opts.launch_agents, load=opts.load_agent, names=opts.names)
     _ok(f"Daily run at {at.hour:02d}:{at.minute:02d} (runs on wake if the Mac was asleep)")
 
 
@@ -352,6 +378,16 @@ def run_setup(opts: Options) -> int:
     total = 6
     env_path = opts.repo / ".env"
     env = envfile.read(env_path)
+    instance = check_instance(
+        opts.instance if opts.instance is not None else env.get("SOCIALMGR_INSTANCE", "")
+    )
+    opts.names = Names(instance)
+    if instance:
+        typer.secho(
+            f"Instance “{instance}”: a separate install with its own app, daily run, MCP server "
+            f"`{opts.names.mcp_name}` and dashboard port. Your main install isn't touched.",
+            fg=typer.colors.CYAN,
+        )
 
     _step(1, total, "Your X account")
     values = _account(opts, env)
@@ -360,6 +396,9 @@ def run_setup(opts: Options) -> int:
     _step(3, total, "Backups")
     values |= _backups(opts, env)
     values["SOCIALMGR_PLUGINS__PROVIDERS"] = '["x"]'
+    if instance:
+        values["SOCIALMGR_INSTANCE"] = instance
+        values["SOCIALMGR_PORT"] = env.get("SOCIALMGR_PORT") or str(opts.names.default_port)
     envfile.update(env_path, values, template=opts.repo / ".env.example")
     settings = Settings()
     migrate.upgrade(make_engine(settings))
@@ -371,18 +410,20 @@ def run_setup(opts: Options) -> int:
     _step(5, total, "Claude Code and MCP")
     _claude(opts, uv)
 
-    _step(6, total, "The Social Manager app and the daily run")
+    _step(6, total, f"The {opts.names.app_name} app and the daily run")
     _mac(opts)
 
     first = connected and opts.first_run and not _has_runs()
     if first and _confirm(opts, "Run the first collection now (about $0.05-0.20 of X credit)?"):
         subprocess.run([sys.executable, "-m", "socialmgr", "run"], check=False)
 
-    typer.secho("\nSocial Manager is set up.", bold=True, fg=typer.colors.GREEN)
+    typer.secho(f"\n{opts.names.app_name} is set up.", bold=True, fg=typer.colors.GREEN)
     if sys.platform == "darwin" and opts.app:
-        _say("Open it any time: Spotlight (⌘ Space) → “Social Manager”, or ~/Applications.")
-    _say("In Claude Code, try: “Use the socialmgr weekly_review prompt”.")
+        _say(f"Open it any time: Spotlight (⌘ Space) → “{opts.names.app_name}”, or ~/Applications.")
+    _say(f"In Claude Code, try: “Use the {opts.names.mcp_name} weekly_review prompt”.")
     _say("To update later, run the same install command again.")
+    if instance:
+        _say(f"To remove this install: {opts.repo}/.venv/bin/socialmgr uninstall, then delete {opts.repo}.")
     for item in opts.todo:
         _warn(item)
     if sys.platform == "darwin" and opts.app and not opts.yes and _confirm(opts, "Open Social Manager now?"):
