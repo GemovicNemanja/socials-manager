@@ -157,6 +157,29 @@ def test_resumed_run_from_an_earlier_day_is_followed_by_a_fresh_run(tmp_path: Pa
         assert outcomes[1].cutoff_at == T0 + timedelta(days=2)
 
 
+def test_a_step_that_fails_then_succeeds_on_resume_reports_no_error(tmp_path: Path) -> None:
+    """Found by an agent: after reconnecting X, the resumed run still showed the old error."""
+    settings = _settings(tmp_path)
+    plugins = load_plugins(settings)
+    attempts: list[int] = []
+    flaky = runs.StepRegistry()
+
+    @flaky.register("collect", "")
+    def _collect(ctx: runs.RunContext) -> dict[str, Any]:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise Boom("X refused to refresh the token (400)")
+        return {"new_posts": 0}
+
+    with _factory(settings)() as session:
+        with pytest.raises(runs.StepFailed):
+            runs.execute(session, settings, plugins, clock=lambda: T0, registry=flaky)
+        outcome = runs.execute(session, settings, plugins, clock=lambda: T0, registry=flaky)
+        step = outcome.steps["collect"]
+        assert outcome.resumed and step["status"] == "done" and "error" not in step
+        assert "refused to refresh" in step["earlier_error"]
+
+
 def test_backup_step_writes_and_prunes(tmp_path: Path) -> None:
     settings = _settings(tmp_path, backup=True, backup_keep_daily=2, backup_keep_weekly=0)
     plugins = load_plugins(settings)

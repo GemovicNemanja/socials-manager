@@ -262,7 +262,12 @@ class RunOutcome:
 
 def _mark(run: Run, step: str, **fields: Any) -> None:
     steps = dict(run.steps or {})
-    steps[step] = {**steps.get(step, {}), **fields}
+    entry = {**steps.get(step, {}), **fields}
+    if fields.get("status") == "done" and "error" in entry:
+        # A step that failed and then succeeded on resume: keep the old error as history, so
+        # readers (briefing, agents) don't report a problem that was already fixed.
+        entry["earlier_error"] = entry.pop("error")
+    steps[step] = entry
     run.steps = steps  # reassign so the JSON column is flagged dirty
 
 
