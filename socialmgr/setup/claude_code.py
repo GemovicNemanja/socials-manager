@@ -6,7 +6,8 @@ import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-MCP_NAME = "socialmgr"
+from socialmgr.setup.names import LIVE, Names
+
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 
 
@@ -40,16 +41,24 @@ def mcp_command(repo: Path, uv: str) -> list[str]:
     return [uv, "run", "--quiet", "--directory", str(repo), "socialmgr", "mcp"]
 
 
-def register_mcp(claude: str, repo: Path, uv: str, run: Runner | None = None) -> None:
+def register_mcp(claude: str, repo: Path, uv: str, run: Runner | None = None, names: Names = LIVE) -> None:
     """(Re)register at user scope, so every Claude Code session on this Mac sees the tools."""
     run = run or _run
-    run([claude, "mcp", "remove", "--scope", "user", MCP_NAME])  # absent is fine
-    done = run([claude, "mcp", "add", "--scope", "user", MCP_NAME, "--", *mcp_command(repo, uv)])
+    run([claude, "mcp", "remove", "--scope", "user", names.mcp_name])  # absent is fine
+    done = run([claude, "mcp", "add", "--scope", "user", names.mcp_name, "--", *mcp_command(repo, uv)])
     if done.returncode != 0:
         raise RuntimeError(f"claude mcp add failed: {(done.stderr or done.stdout).strip()}")
 
 
-def mcp_registered(claude: str, repo: Path, run: Runner | None = None) -> bool:
+def mcp_registered(claude: str, repo: Path, run: Runner | None = None, names: Names = LIVE) -> bool:
     """Registered, and pointing at this install (not an older checkout)."""
-    done = (run or _run)([claude, "mcp", "get", MCP_NAME])
+    done = (run or _run)([claude, "mcp", "get", names.mcp_name])
     return done.returncode == 0 and f"--directory {repo} socialmgr" in done.stdout
+
+
+def unregister_mcp(claude: str, repo: Path, run: Runner | None = None, names: Names = LIVE) -> bool:
+    """Remove the registration, but only if it points at this install."""
+    if not mcp_registered(claude, repo, run, names):
+        return False
+    (run or _run)([claude, "mcp", "remove", "--scope", "user", names.mcp_name])
+    return True

@@ -110,6 +110,8 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8765
     workspace_id: int = 1
+    # A named side-by-side install ("test"): its own app, daily run, MCP server and port (setup).
+    instance: str = ""
     account: AccountConfig = AccountConfig()
     peers: tuple[PeerConfig, ...] = ()
     plugins: PluginConfig = PluginConfig()

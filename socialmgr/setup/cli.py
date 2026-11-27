@@ -7,7 +7,8 @@ from typing import Annotated
 import typer
 
 from socialmgr.core.config import Settings
-from socialmgr.setup import macos, server, wizard
+from socialmgr.setup import claude_code, macos, server, wizard
+from socialmgr.setup.names import Names
 
 
 def register(app: typer.Typer) -> None:
@@ -31,6 +32,10 @@ def register(app: typer.Typer) -> None:
         applications: Annotated[Path | None, typer.Option(hidden=True)] = None,
         launch_agents: Annotated[Path | None, typer.Option(hidden=True)] = None,
         load_agent: Annotated[bool, typer.Option(hidden=True)] = True,
+        instance: Annotated[
+            str | None,
+            typer.Option(envvar="SOCIALMGR_INSTANCE", help="Name a separate side-by-side install, e.g. test"),
+        ] = None,
     ) -> None:
         """Set this Mac up (re-runnable): settings, X connection, Claude Code + MCP, app, daily run."""
         opts = wizard.Options(
@@ -52,6 +57,7 @@ def register(app: typer.Typer) -> None:
             applications=applications,
             launch_agents=launch_agents,
             load_agent=load_agent,
+            instance=instance,
         )
         try:
             raise typer.Exit(wizard.run_setup(opts))
@@ -83,11 +89,13 @@ def register(app: typer.Typer) -> None:
         off: Annotated[bool, typer.Option("--off", help="Remove the daily run")] = False,
     ) -> None:
         """Show, set or remove the daily automatic run (a launchd job on this Mac)."""
+        names = Names(Settings().instance)
         if off:
-            typer.echo("Daily run removed." if macos.unschedule() else "No daily run was scheduled.")
+            removed = macos.unschedule(names=names)
+            typer.echo("Daily run removed." if removed else "No daily run was scheduled.")
             return
         if at is None:
-            current = macos.scheduled()
+            current = macos.scheduled(names=names)
             typer.echo(
                 f"Daily run at {current.hour:02d}:{current.minute:02d}; log: data/logs/daily-run.log"
                 if current
@@ -98,5 +106,26 @@ def register(app: typer.Typer) -> None:
             when = wizard.parse_time(at)
         except ValueError as exc:
             raise typer.BadParameter(str(exc)) from exc
-        macos.schedule(wizard.APP_ROOT, when)
+        macos.schedule(wizard.APP_ROOT, when, names=names)
         typer.echo(f"Daily run at {when.hour:02d}:{when.minute:02d} (runs on wake if the Mac was asleep).")
+
+    @app.command()
+    def uninstall(
+        yes: Annotated[bool, typer.Option("--yes", "-y", help="Don't ask")] = False,
+    ) -> None:
+        """Remove this install's app, daily run and MCP server (your data and settings stay)."""
+        settings = Settings()
+        names = Names(settings.instance)
+        repo = wizard.APP_ROOT
+        if not yes:
+            typer.confirm(
+                f"Remove {names.app_name}'s app, daily run and MCP server `{names.mcp_name}`?", abort=True
+            )
+        if server.stop(settings):
+            typer.echo("Stopped its server.")
+        typer.echo("Removed the daily run." if macos.unschedule(names=names) else "No daily run to remove.")
+        typer.echo("Removed the app." if macos.remove_app(names=names) else "No app to remove.")
+        claude = claude_code.find()
+        if claude and claude_code.unregister_mcp(claude, repo, names=names):
+            typer.echo(f"Removed the MCP server `{names.mcp_name}`.")
+        typer.echo(f"Your data and settings are still in {repo}. Delete that folder to remove everything.")
