@@ -20,25 +20,24 @@ Know before you read the numbers:
 
 ### One command (teammates start here)
 
-1. Ask the owner to add your GitHub account to the repository, and accept the invitation (github.com/notifications).
-2. Open Terminal and paste:
+Open Terminal and paste:
 
-   ```sh
-   /bin/bash -c "$(curl -fsSL https://gist.githubusercontent.com/GemovicNemanja/e70fb1b2c56f783df32ca1d8967489fb/raw/bootstrap.sh)"
-   ```
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/GemovicNemanja/socials-manager/main/scripts/bootstrap.sh)"
+```
 
 It walks you through everything, in about 10 minutes (most of it is creating your X developer app):
 
-- installs what's missing, just for Social Manager: Apple's Command Line Tools (git), GitHub CLI, [uv](https://docs.astral.sh/uv/) and Python 3.13, Node 24 and pnpm, and [Claude Code](https://claude.com/claude-code);
-- signs you in to GitHub in the browser and downloads the code to `~/socials-manager`;
+- installs what's missing, just for Social Manager: Apple's Command Line Tools (git), [uv](https://docs.astral.sh/uv/) and Python 3.13, Node 24 and pnpm, and [Claude Code](https://claude.com/claude-code);
+- downloads the code to `~/socials-manager` (no GitHub account needed);
 - asks for your X handle, time zone and whether you have Premium; shows how to create your X developer app (it opens the portal) and asks for its Client ID; asks where backups should go (Proton Drive, iCloud Drive or other synced folders it finds, or this Mac only);
 - connects your X account in the browser, registers the `socialmgr` MCP server with Claude Code for every folder, and signs you in to Claude Code if needed;
 - creates the **Social Manager** app in `~/Applications` (Spotlight: "Social Manager"): opening it starts the server if it isn't running and opens the dashboard;
 - schedules the **daily run** at a time you choose (09:00 by default; a run missed while the Mac sleeps happens on wake) and offers the first run.
 
-**Updating:** paste the same command again. It pulls the latest code, rebuilds, restarts the server if it was running, and keeps every answer (`--reconfigure` at the end of the command asks again). Running `scripts/install.sh` from the folder does the same.
+**Updating:** paste the same command again. It pulls the latest code, rebuilds, restarts the server if it was running, and keeps every answer. Running `scripts/install.sh` from the folder does the same.
 
-The command is `scripts/bootstrap.sh`, published as a public gist because the repository is private. It holds no secrets and no app code. When `scripts/bootstrap.sh` changes, update the gist too (`gh gist edit e70fb1b2c56f783df32ca1d8967489fb scripts/bootstrap.sh`).
+The command runs [`scripts/bootstrap.sh`](scripts/bootstrap.sh) from this repository; read it first if you like. Options after `--` go to the installer, for example `... bootstrap.sh)" -- --reconfigure`.
 
 ### By hand
 
@@ -48,7 +47,7 @@ The installer runs these steps; use them to see or redo one.
 2. **Install:**
 
    ```sh
-   git clone <repo URL> ~/socials-manager && cd ~/socials-manager
+   git clone https://github.com/GemovicNemanja/socials-manager.git ~/socials-manager && cd ~/socials-manager
    uv sync
    (cd web && pnpm install && pnpm build)
    ```
