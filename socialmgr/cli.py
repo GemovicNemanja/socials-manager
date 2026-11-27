@@ -1,6 +1,7 @@
 """``socialmgr`` command line."""
 
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -196,6 +197,11 @@ def run() -> None:
             )
         except (runs.RunInProgress, runs.StepFailed) as exc:
             typer.echo(str(exc), err=True)
+            if isinstance(exc, runs.StepFailed) and not sys.stdout.isatty():
+                # The scheduled run has no one watching its log: say it on screen.
+                from socialmgr.setup.macos import notify
+
+                notify("Social Manager: today's run stopped", str(exc))
             raise typer.Exit(1) from exc
         for outcome in outcomes:
             if outcome.resumed:

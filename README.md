@@ -47,7 +47,7 @@ To test the installer on a Mac that already runs Social Manager (before sharing 
 SOCIALMGR_INSTANCE=test /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/GemovicNemanja/socials-manager/main/scripts/bootstrap.sh)"
 ```
 
-It installs into `~/socials-manager-test` with its own app ("Social Manager (test)"), daily run, MCP server (`socialmgr-test`), dashboard port (8766) and backup folder, and never changes the main install. Connecting X needs port 8765 for a moment (the callback registered in your X app), so it offers to pause your running Social Manager and restarts it right after. To remove it:
+It installs into `~/socials-manager-test` with its own app ("Social Manager (test)"), daily run, MCP server (`socialmgr-test`), dashboard port (8766) and backup folder, and never changes the main install. Connecting X needs port 8765 for a moment (the callback registered in your X app), so it offers to pause your running Social Manager and restarts it right after. X keeps one sign-in per account per X app, so connecting the test install with your own account signs the main install out: afterwards run `.venv/bin/socialmgr connect` in `~/socials-manager` (its next run would otherwise stop and notify you). To remove the test install:
 
 ```sh
 ~/socials-manager-test/.venv/bin/socialmgr uninstall && rm -rf ~/socials-manager-test

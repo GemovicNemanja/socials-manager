@@ -83,9 +83,17 @@ def test_validation() -> None:
     for bad in ("24:00", "9", "09:60"):
         with pytest.raises(ValueError):
             wizard.parse_time(bad)
-    assert wizard.check_client_id(" aBc123-_xyz:ci ") == "aBc123-_xyz:ci"
-    with pytest.raises(ValueError):
-        wizard.check_client_id("short")
+    real_shape = "Q2xpZW50SWRFeGFtcGxlOjE6Y2k"  # base64 of "ClientIdExample:1:ci", like X's
+    assert wizard.check_client_id(f" {real_shape} ") == real_shape
+    for wrong in (
+        "short",
+        "Q2xpZW50SWRFeGFtcGxl",  # base64, but not a Client ID
+        "AAAAAAAAAAAAAAAAAAAAAMLheAAAAAAA0%2BuSeid%2BULvsea4JtiGRiSDSJSI%3DEUifiRBkKG5E2X",  # bearer-like
+        "x" * 108,  # a long token
+        "aBc123-_xyz:ci",  # not base64 at all
+    ):
+        with pytest.raises(ValueError, match="Keys and tokens"):
+            wizard.check_client_id(wrong)
     wizard.check_tz(wizard.system_tz())
 
 
@@ -291,7 +299,7 @@ def test_setup_without_claude_code_lists_it_as_a_todo(
     repo = _repo(tmp_path)
     result = CliRunner().invoke(
         app,
-        ["setup", "--yes", "--handle", "x_user", "--client-id", "Q2xpZW50SWRFeGFtcGxl",
+        ["setup", "--yes", "--handle", "x_user", "--client-id", "Q2xpZW50SWRFeGFtcGxlOjE6Y2k",
          "--no-connect", "--no-schedule", "--no-app", *_hidden(tmp_path, repo)],
     )  # fmt: skip
     assert result.exit_code == 0, result.output
@@ -393,7 +401,7 @@ def test_setup_instance_installs_beside_the_main_one(
     live_app = macos.write_app(tmp_path / "main", tmp_path / "Applications")  # the main install
     macos.schedule(tmp_path / "main", macos.DailyRun(9, 0), tmp_path / "LaunchAgents", load=False)
     runner = CliRunner()
-    args = ["--yes", "--handle", "tester_1", "--client-id", "Q2xpZW50SWRFeGFtcGxl", "--no-connect",
+    args = ["--yes", "--handle", "tester_1", "--client-id", "Q2xpZW50SWRFeGFtcGxlOjE6Y2k", "--no-connect",
             "--run-at", "10:15", *_hidden(tmp_path, repo)]  # fmt: skip
     result = runner.invoke(app, ["setup", *args], env={"SOCIALMGR_INSTANCE": "test"})
     assert result.exit_code == 0, result.output
@@ -495,3 +503,66 @@ def test_port_holder_finds_a_real_server_and_pause_resume_work(
     finally:
         server.stop(settings)
     assert server.port_holder(port) is None
+
+
+def test_rerun_replaces_a_saved_key_that_is_not_a_client_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mac: FakeClaude
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    repo = _repo(tmp_path)
+    envfile.update(
+        repo / ".env", {"SOCIALMGR_ACCOUNT__HANDLE": "@tester_1", "SOCIALMGR_X__CLIENT_ID": "x" * 108}
+    )
+    answers = ["", "n", "n", "Q2xpZW50SWRFeGFtcGxlOjE6Y2k", "n", "", "n"]  # tz, premium, portal, id, ...
+    result = CliRunner().invoke(app, ["setup", *_hidden(tmp_path, repo)], input="\n".join(answers) + "\n")
+    assert result.exit_code == 0, result.output
+    assert "The saved Client ID is a different key" in result.output
+    assert envfile.read(repo / ".env")["SOCIALMGR_X__CLIENT_ID"] == "Q2xpZW50SWRFeGFtcGxlOjE6Y2k"
+
+
+def test_notify_quotes_text_for_osascript() -> None:
+    calls: list[list[str]] = []
+
+    def fake(cmd: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    assert macos.notify('Run "stopped"', "X refused \\ the token", run=fake)
+    script = calls[0][2]
+    assert calls[0][:2] == ["/usr/bin/osascript", "-e"]
+    assert script == 'display notification "X refused \\\\ the token" with title "Run \\"stopped\\""'
+    assert not macos.notify("t", "m")  # inside pytest: never a real notification
+
+
+def test_a_failed_scheduled_run_notifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from socialmgr.services import runs
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SOCIALMGR_DATA_DIR", str(tmp_path / "data"))
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        macos, "notify", lambda title, message, run=None: sent.append((title, message)) or True
+    )
+
+    def fail(*_a: object, **_k: object) -> object:
+        raise runs.StepFailed(7, "collect", "X refused to refresh the token (400)")
+
+    monkeypatch.setattr(runs, "run_now", fail)
+    result = CliRunner().invoke(app, ["run"])  # CliRunner's stdout isn't a terminal, like launchd's
+    assert result.exit_code == 1
+    assert sent and "stopped" in sent[0][0] and "refresh the token" in sent[0][1]
+
+
+def test_instance_setup_warns_that_connecting_signs_out_the_main_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mac: FakeClaude
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(wizard, "_connected", lambda handle: False)
+    monkeypatch.setattr(wizard, "_confirm", lambda *_a, **_k: False)
+    warnings: list[str] = []
+    monkeypatch.setattr(wizard, "_warn", warnings.append)
+    assert not wizard._connect(wizard.Options(repo=tmp_path, names=Names("test")), "@tester_1")
+    assert any("signs your main install out" in w for w in warnings)
+    warnings.clear()
+    assert not wizard._connect(wizard.Options(repo=tmp_path), "@tester_1")  # the main install: no warning
+    assert not any("signs your main install out" in w for w in warnings)
