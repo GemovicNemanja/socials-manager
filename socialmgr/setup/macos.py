@@ -99,10 +99,19 @@ def agent_plist(repo: Path, at: DailyRun, names: Names = LIVE) -> dict[str, obje
     log = repo / "data" / "logs" / "daily-run.log"
     return {
         "Label": names.run_label,
-        "ProgramArguments": [str(repo / ".venv" / "bin" / "socialmgr"), "run"],
+        # `--scheduled` skips the start when a run already finished since the last scheduled time
+        # and waits for the network (a Mac just woken often has none for a few seconds).
+        "ProgramArguments": [
+            str(repo / ".venv" / "bin" / "socialmgr"),
+            "run",
+            "--scheduled",
+            f"{at.hour:02d}:{at.minute:02d}",
+        ],
         "WorkingDirectory": str(repo),
-        # A missed time (Mac asleep) runs on wake; a run already in progress is left alone.
+        # At the time, or on wake when the Mac slept through it; a run already in progress is left alone.
         "StartCalendarInterval": {"Hour": at.hour, "Minute": at.minute},
+        # And at every login (and when installed): catches up a day the Mac was off at that time.
+        "RunAtLoad": True,
         "StandardOutPath": str(log),
         "StandardErrorPath": str(log),
         "EnvironmentVariables": {"PATH": tool_path()},

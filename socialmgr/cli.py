@@ -181,19 +181,41 @@ def openapi(out: Path = Path("openapi.json")) -> None:
 
 
 @app.command()
-def run() -> None:
+def run(
+    scheduled: Annotated[
+        str | None,
+        typer.Option(
+            help="Used by the daily job (HH:MM): skip if a run finished since the last such time, "
+            "and wait for the network first."
+        ),
+    ] = None,
+) -> None:
     """Collect, label, forecast, score and write the briefing (resumes an interrupted run)."""
     from socialmgr.modelling.regimes import github_fetcher
     from socialmgr.services import briefing, runs
     from socialmgr.services.plugins import load_plugins
+    from socialmgr.setup import catchup
 
     settings = _settings()
     engine = make_engine(settings)
     migrate.upgrade(engine)
     with session_factory(engine)() as session:
+        if scheduled is not None:
+            from socialmgr.setup.wizard import parse_time
+
+            slot = catchup.last_slot(parse_time(scheduled), datetime.now().astimezone())
+            if catchup.ran_since(session, settings.workspace_id, slot):
+                typer.echo(f"Already ran since {slot:%Y-%m-%d %H:%M}; nothing to catch up.")
+                return
+            if not catchup.wait_for_network():
+                typer.echo("No connection to X after 10 minutes; trying anyway.", err=True)
         try:
             outcomes = runs.run_now(
-                session, settings, load_plugins(settings), regime_fetcher=github_fetcher()
+                session,
+                settings,
+                load_plugins(settings),
+                trigger="schedule" if scheduled is not None else "cli",
+                regime_fetcher=github_fetcher(),
             )
         except (runs.RunInProgress, runs.StepFailed) as exc:
             typer.echo(str(exc), err=True)

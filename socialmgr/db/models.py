@@ -112,7 +112,7 @@ class Run(WorkspaceMixin, Base):
     __tablename__ = "runs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    trigger: Mapped[str] = mapped_column(String(16))  # cli | agent | fixture
+    trigger: Mapped[str] = mapped_column(String(16))  # cli | agent | schedule | fixture
     started_at: Mapped[datetime]
     cutoff_at: Mapped[datetime]
     finished_at: Mapped[datetime | None]
